@@ -465,16 +465,19 @@ export default function App() {
                     normalizedData = Object.entries(groups).map(([floorName, units]) => ({
                         floor: floorName.replace(/[^\d]/g, '') || floorName,
                         units: units.map((u: any) => {
-                            const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
-                            const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
+                            const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
+                            
                             return {
                                 id: String(deptoVal),
                                 number: String(deptoVal),
-                                floor: u.ubicacion || floorName || '0',
+                                floor: u.piso || u.ubicacion || floorName || '0',
                                 status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
                                 responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                                storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                                storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                fecha_obs: obsDate,
                                 observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                                 type: 'DEPARTAMENTO' as const,
                                 ...u
@@ -490,44 +493,58 @@ export default function App() {
                     normalizedData = data.map((f: any) => ({
                         floor: f.floor || '0',
                         units: (f.units || []).map((u: any) => {
-                            const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
-                            const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
+                            const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
+                            
                             return {
                                 id: String(deptoVal),
                                 number: String(deptoVal),
-                                floor: u.ubicacion || f.floor || '0',
+                                floor: u.piso || u.ubicacion || f.floor || '0',
                                 status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
                                 responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                                storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                                storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                fecha_obs: obsDate,
                                 observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                                 type: 'DEPARTAMENTO' as const,
                                 ...u
                             };
                         })
-                    })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                    })).sort((a, b) => {
+                        const valA = parseInt(String(a.floor)) || 0;
+                        const valB = parseInt(String(b.floor)) || 0;
+                        return valB - valA;
+                    });
                 }
             } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
                 // Object structure { "PISO X": [...], ... }
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
                     floor: floorName.replace(/[^\d]/g, '') || floorName,
                     units: (Array.isArray(units) ? units : []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
-                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                        const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
+                        const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                        const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
+                        
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
-                            floor: u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
+                            floor: u.piso || u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
                             status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            fecha_obs: obsDate,
+                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                             type: 'DEPARTAMENTO' as const,
                             ...u
                         };
                     })
-                })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                })).sort((a, b) => {
+                    const valA = parseInt(String(a.floor)) || 0;
+                    const valB = parseInt(String(b.floor)) || 0;
+                    return valB - valA;
+                });
             } else {
                 throw new Error('La API respondió éxitosamente pero no se encontraron departamentos registrados.');
             }
