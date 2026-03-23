@@ -655,7 +655,7 @@ export default function App() {
     const handleSelectProject = (project: Project) => {
         setSelectedProject(project);
         fetchProjectData(project.id);
-        setActiveTab(project.stage === 'CONSTRUCCION' ? 'TABLE' : 'GRID');
+        setActiveTab('GRID');
         setSearchTerm('');
         setFilterStatus('ALL');
         setView('DASHBOARD');
