@@ -749,6 +749,7 @@ export default function App() {
     }, [floorsData, selectedProject]);
 
     const stats = isConstruction ? [
+        { label: 'TOTAL DEPARTAMENTOS', value: statCounts.total.count.toString(), percentage: '100%', icon: Layers, color: 'text-gray-900', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-100', textLight: false },
         { label: 'R0 - SIN INICIAR', value: statCounts.r0.count.toString(), percentage: `${statCounts.r0.percentage}%`, icon: Construction, color: 'text-gray-500', bg: 'bg-white dark:bg-zinc-900 border-2 border-gray-100 dark:border-zinc-800', textLight: false },
         { label: 'R1 - PRIMERA REVISIÓN', value: statCounts.r1.count.toString(), percentage: `${statCounts.r1.percentage}%`, icon: Construction, color: 'text-red-700', bg: 'bg-red-500 hover:bg-red-600', border: 'border-transparent', textLight: true },
         { label: 'R2 - SEGUNDA REVISIÓN', value: statCounts.r2.count.toString(), percentage: `${statCounts.r2.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
