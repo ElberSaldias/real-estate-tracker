@@ -34,13 +34,14 @@ import {
     Moon,
     Sun,
     HardHat,
+    MessageSquare,
     X
 } from 'lucide-react'
 
 
 
 // Types
-type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV';
+type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R';
 
 interface Unit {
     id: string;
@@ -108,11 +109,12 @@ const PROJECTS: Project[] = [
     },
     {
         id: 'don-diego',
-        name: 'Don Diego',
-        location: 'Comuna de Santiago',
-        units: 150,
+        name: 'DON DIEGO',
+        location: 'Antofagasta, Chile',
+        units: 148,
         progress: 10,
         image: '/projects/don-diego.png',
+        gasUrl: 'https://script.google.com/macros/s/AKfycbzR-a8PHxpYbdJ9KOD0ABAN8IvBjqLyrzmc9EqRyRdqQqJl7hpB120ajpbTeZLoh297VQ/exec',
         stage: 'CONSTRUCCION'
     }
 ];
@@ -130,8 +132,8 @@ const calculateBusinessDays = (startDate: Date, endDate: Date) => {
 
     // Fixed Chilean holidays
     const holidays = [
-        '01-01', '05-01', '05-21', '06-29', '07-16', 
-        '08-15', '09-18', '09-19', '10-12', '10-31', 
+        '01-01', '05-01', '05-21', '06-29', '07-16',
+        '08-15', '09-18', '09-19', '10-12', '10-31',
         '11-01', '12-08', '12-25'
     ];
 
@@ -139,7 +141,7 @@ const calculateBusinessDays = (startDate: Date, endDate: Date) => {
     while (tempDate <= end) {
         const dayOfWeek = tempDate.getDay();
         const mmdd = `${String(tempDate.getMonth() + 1).padStart(2, '0')}-${String(tempDate.getDate()).padStart(2, '0')}`;
-        
+
         // 0 = Sunday, 6 = Saturday
         if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.includes(mmdd)) {
             count++;
@@ -163,6 +165,10 @@ const STATUS_CONFIG: Record<string, { label: string, short: string, color: strin
     'SIN VISITA': { label: 'SIN VISITA', short: 'SV', color: 'text-gray-600', bg: 'bg-gray-400' },
     'DL': { label: 'DEPARTAMENTO LIBRE', short: 'DL', color: 'text-slate-600', bg: 'bg-slate-300' },
     'DEPARTAMENTO LIBRE': { label: 'DEPARTAMENTO LIBRE', short: 'DL', color: 'text-slate-600', bg: 'bg-slate-300' },
+    'R1': { label: 'R1 - REVISIÓN 1', short: 'R1', color: 'text-orange-600', bg: 'bg-orange-500' },
+    'R2': { label: 'R2 - REVISIÓN 2', short: 'R2', color: 'text-blue-600', bg: 'bg-blue-500' },
+    'R3': { label: 'R3 - REVISIÓN 3', short: 'R3', color: 'text-green-600', bg: 'bg-green-500' },
+    'S/R': { label: 'SIN REVISIÓN', short: 'S/R', color: 'text-gray-400', bg: 'bg-gray-300' },
 };
 
 const generateProjectData = (projectId: string) => {
@@ -297,7 +303,7 @@ export default function App() {
     const [viewerPdfUrl, setViewerPdfUrl] = useState<string | null>(null);
 
     // Load and manage data in state for persistence
-    const [floorsData, setFloorsData] = useState<{ floor: number, units: Unit[] }[]>([]);
+    const [floorsData, setFloorsData] = useState<{ floor: number | string, units: Unit[] }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [projectsStats, setProjectsStats] = useState<Record<string, Record<string, number>>>({});
     const [isDarkMode, setIsDarkMode] = useState(false);
@@ -334,18 +340,41 @@ export default function App() {
                     if (project.gasUrl) {
                         const response = await fetch(project.gasUrl);
                         if (response.ok) {
-                            projectFloors = await response.json();
+                            const data = await response.json();
+                            if (Array.isArray(data) && data.length > 0 && typeof data[0].depto !== 'undefined') {
+                                // Special handling for flat list of units (e.g., Don Diego construction)
+                                projectFloors = [{
+                                    floor: 'LISTADO',
+                                    units: data.map((u: any) => ({
+                                        id: String(u.depto),
+                                        number: String(u.depto),
+                                        floor: '0',
+                                        status: String(u.revisión || u.revision || u.REVISIÓN || u.REVISION || 'S/R').trim().toUpperCase(),
+                                        responsible: u.propietario || u.PROPIETARIO || 'SIN ASIGNAR',
+                                        parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                                        storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                        observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
+                                        type: 'DEPARTAMENTO' as const, // Default type
+                                        ...u
+                                    }))
+                                }];
+                            } else {
+                                projectFloors = data;
+                            }
                         }
                     } else {
                         projectFloors = generateProjectData(project.id);
                     }
 
-                    const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, total: 0 };
+                    const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R1: 0, R2: 0, R3: 0, total: 0 };
                     projectFloors.forEach((f: any) => {
                         f.units.forEach((u: Unit) => {
                             counts.total++;
-                            if (u.status in counts) {
-                                counts[u.status as keyof typeof counts]++;
+                            const statusKey = u.status.trim().toUpperCase();
+                            if (statusKey in counts) {
+                                counts[statusKey as keyof typeof counts]++;
+                            } else if (STATUS_CONFIG[statusKey]?.short in counts) {
+                                counts[STATUS_CONFIG[statusKey].short as keyof typeof counts]++;
                             }
                         });
                     });
@@ -378,64 +407,82 @@ export default function App() {
             const cacheBuster = `?t=${Date.now()}`;
             const response = await fetch(project.gasUrl + cacheBuster);
             if (!response.ok) throw new Error('Error al conectar con la base de datos');
+            // Direct check for flat JSON list from specialized construction script
             const data = await response.json();
 
-            // Basic validation
-            if (!Array.isArray(data) || (data.length > 0 && typeof data[0].floor === 'undefined')) {
+            let normalizedData = [];
+
+            if (Array.isArray(data) && data.length > 0 && typeof data[0].depto !== 'undefined') {
+                // If it's a flat list of units (like Don Diego), wrap it in a single floor for compatibility
+                normalizedData = [{
+                    floor: 'LISTADO',
+                    units: data.map((u: any) => ({
+                        id: String(u.depto),
+                        number: String(u.depto),
+                        floor: '0',
+                        status: String(u.revisión || u.revision || u.REVISIÓN || u.REVISION || 'S/R').trim().toUpperCase(),
+                        responsible: u.propietario || u.PROPIETARIO || 'SIN ASIGNAR',
+                        parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                        storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                        observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
+                        type: 'DEPARTAMENTO' as const, // Default type
+                        ...u
+                    }))
+                }];
+            } else if (Array.isArray(data)) {
+                // Standard structure processing
+                normalizedData = data.map((f: any) => ({
+                    ...f,
+                    units: f.units.map((u: any) => {
+                        // Refined helper: allow '0' as valid, but treat true empty/NA as missing
+                        const isNoData = (val: any) => {
+                            if (val === 0 || val === '0') return false; // Allowed!
+                            const s = String(val || '').toUpperCase().trim();
+                            return !val || s === 'N/A' || s === 'N/D' || s === '-' || s === 'N/D.' || s === 'S/A' || s === 'SIN ASIGNAR' || s === '';
+                        };
+
+                        // Search for all possible storage-related keys (e.g., Bodega 1, Bodega 2, B-101)
+                        const storageKeys = Object.keys(u).filter(key =>
+                            /bodega|storage|bode|^b[\s\d\-_]/i.test(key) && !isNoData(u[key])
+                        );
+                        const storage = storageKeys.length > 0
+                            ? [...new Set(storageKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
+                            : (u.storageNumber && !isNoData(u.storageNumber) ? u.storageNumber : (u.bodega && !isNoData(u.bodega) ? u.bodega : '-'));
+
+                        // Search for all possible parking-related keys (e.g., Estacionamiento, Estac, E-101, Estacion)
+                        const parkingKeys = Object.keys(u).filter(key =>
+                            /estacionamiento|parking|estac|est\.|estacion|^e[\s\d\-_]/i.test(key) && !isNoData(u[key])
+                        );
+                        const parking = parkingKeys.length > 0
+                            ? [...new Set(parkingKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
+                            : (u.parkingNumber && !isNoData(u.parkingNumber) ? u.parkingNumber : (u.estacionamiento && !isNoData(u.estacionamiento) ? u.estacionamiento : '-'));
+
+                        // Search for all possible responsible/owner keys
+                        const respKeys = Object.keys(u).filter(key =>
+                            /responsible|responsable|propietario|owner/i.test(key) && !isNoData(u[key]) && String(u[key]).toUpperCase() !== 'SIN ASIGNAR'
+                        );
+                        const resp = respKeys.length > 0
+                            ? [...new Set(respKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
+                            : (u.responsible || u.responsable || u.propietario || u.PROPIETARIO || 'SIN ASIGNAR');
+
+                        return {
+                            ...u,
+                            storageNumber: storage,
+                            parkingNumber: parking,
+                            responsible: resp,
+                            proceso_status: u.proceso_status || u.PROCESO_STATUS,
+                            tipo_proceso: u.tipo_proceso || u.TIPO_PROCESO,
+                            observaciones: u.observaciones || u.OBSERVACIONES || u.observacion || u.OBSERVACION,
+                            fecha_obs: u.fecha_obs || u.FECHA_OBS || u.fecha_observacion || u.FECHA_OBSERVACION || u["fecha de observaciones"] || u["FECHA DE OBSERVACIONES"],
+                            link_acta: u.link_acta || u.LINK_ACTA || u.acta_link || u.ACTA_LINK || u["Link de dropbox"] || u["LINK DE DROPBOX"]
+                        };
+                    })
+                }));
+            } else {
                 throw new Error('La estructura de datos recibida no es válida');
             }
 
-            console.log(`Exito: ${data.length} pisos cargados desde Google Sheets`);
-
-            // Normalize data to handle Spanish keys and 'N/A' values
-            const normalizedData = data.map((f: any) => ({
-                ...f,
-                units: f.units.map((u: any) => {
-                    // Refined helper: allow '0' as valid, but treat true empty/NA as missing
-                    const isNoData = (val: any) => {
-                        if (val === 0 || val === '0') return false; // Allowed!
-                        const s = String(val || '').toUpperCase().trim();
-                        return !val || s === 'N/A' || s === 'N/D' || s === '-' || s === 'N/D.' || s === 'S/A' || s === 'SIN ASIGNAR' || s === '';
-                    };
-
-                    // Search for all possible storage-related keys (e.g., Bodega 1, Bodega 2, B-101)
-                    const storageKeys = Object.keys(u).filter(key =>
-                        /bodega|storage|bode|^b[\s\d\-_]/i.test(key) && !isNoData(u[key])
-                    );
-                    const storage = storageKeys.length > 0
-                        ? [...new Set(storageKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                        : (u.storageNumber && !isNoData(u.storageNumber) ? u.storageNumber : (u.bodega && !isNoData(u.bodega) ? u.bodega : '-'));
-
-                    // Search for all possible parking-related keys (e.g., Estacionamiento, Estac, E-101, Estacion)
-                    const parkingKeys = Object.keys(u).filter(key =>
-                        /estacionamiento|parking|estac|est\.|estacion|^e[\s\d\-_]/i.test(key) && !isNoData(u[key])
-                    );
-                    const parking = parkingKeys.length > 0
-                        ? [...new Set(parkingKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                        : (u.parkingNumber && !isNoData(u.parkingNumber) ? u.parkingNumber : (u.estacionamiento && !isNoData(u.estacionamiento) ? u.estacionamiento : '-'));
-
-                    // Search for all possible responsible/owner keys
-                    const respKeys = Object.keys(u).filter(key =>
-                        /responsible|responsable|propietario|owner/i.test(key) && !isNoData(u[key]) && String(u[key]).toUpperCase() !== 'SIN ASIGNAR'
-                    );
-                    const resp = respKeys.length > 0
-                        ? [...new Set(respKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                        : (u.responsible || u.responsable || u.propietario || u.PROPIETARIO || 'SIN ASIGNAR');
-
-                    return {
-                        ...u,
-                        storageNumber: storage,
-                        parkingNumber: parking,
-                        responsible: resp,
-                        proceso_status: u.proceso_status || u.PROCESO_STATUS,
-                        tipo_proceso: u.tipo_proceso || u.TIPO_PROCESO,
-                        observaciones: u.observaciones || u.OBSERVACIONES || u.observacion || u.OBSERVACION,
-                        fecha_obs: u.fecha_obs || u.FECHA_OBS || u.fecha_observacion || u.FECHA_OBSERVACION || u["fecha de observaciones"] || u["FECHA DE OBSERVACIONES"],
-                        link_acta: u.link_acta || u.LINK_ACTA || u.acta_link || u.ACTA_LINK || u["Link de dropbox"] || u["LINK DE DROPBOX"]
-                    };
-                })
-            }));
-
+            console.log(`Exito: ${normalizedData.length} pisos cargados desde Google Sheets`);
             setFloorsData(normalizedData);
         } catch (error) {
             console.error('Error synchronizing:', error);
@@ -517,7 +564,7 @@ export default function App() {
     const filteredFloors = useMemo(() => floorsData.map(f => ({
         ...f,
         units: f.units.filter(u => {
-            const matchesSearch = u.number.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = u.number.toLowerCase().includes(searchTerm.toLowerCase()) || (u.responsible && u.responsible.toLowerCase().includes(searchTerm.toLowerCase()));
             const matchesStatus = filterStatus === 'ALL' || u.status === filterStatus;
             return matchesStatus && matchesSearch;
         })
@@ -532,8 +579,8 @@ export default function App() {
         let max = 0;
         floorsData.forEach(f => {
             f.units.forEach(u => {
-                const lineNum = parseInt(u.number.slice(-2));
-                if (lineNum > max) max = lineNum;
+                const lineNum = parseInt(String(u.number).slice(-2)); // Ensure u.number is string
+                if (!isNaN(lineNum) && lineNum > max) max = lineNum;
             });
         });
         return max || 0;
@@ -543,8 +590,8 @@ export default function App() {
         const sums = new Array(maxLineNumber).fill(0);
         floorsData.forEach(f => {
             f.units.forEach(u => {
-                const lineNum = parseInt(u.number.slice(-2));
-                if (lineNum > 0 && lineNum <= maxLineNumber) {
+                const lineNum = parseInt(String(u.number).slice(-2)); // Ensure u.number is string
+                if (!isNaN(lineNum) && lineNum > 0 && lineNum <= maxLineNumber) {
                     sums[lineNum - 1]++;
                 }
             });
@@ -584,7 +631,7 @@ export default function App() {
     };
 
     const statCounts = useMemo(() => {
-        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0 };
+        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R1: 0, R2: 0, R3: 0 };
         floorsData.forEach(f => {
             f.units.forEach(u => {
                 const s = u.status.trim().toUpperCase();
@@ -594,6 +641,10 @@ export default function App() {
                 else if (s === 'LISTO PARA ENTREGA' || s === 'LE') canonical = 'LE';
                 else if (s === 'SIN VISITA' || s === 'SV') canonical = 'SV';
                 else if (s === 'DEPARTAMENTO LIBRE' || s === 'DL') canonical = 'DL';
+                else if (s === 'R1' || s === 'REVISION 1') canonical = 'R1';
+                else if (s === 'R2' || s === 'REVISION 2') canonical = 'R2';
+                else if (s === 'R3' || s === 'REVISION 3') canonical = 'R3';
+
 
                 if (canonical in counts) {
                     counts[canonical as keyof typeof counts]++;
@@ -611,6 +662,9 @@ export default function App() {
             listos: { count: counts.LE, percentage: Number(((counts.LE / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             observaciones: { count: counts.OBS, percentage: Number(((counts.OBS / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             sinVisita: { count: counts.SV, percentage: Number(((counts.SV / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            revision1: { count: counts.R1, percentage: Number(((counts.R1 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            revision2: { count: counts.R2, percentage: Number(((counts.R2 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            revision3: { count: counts.R3, percentage: Number(((counts.R3 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             vendidos: { count: soldTotal, percentage: Number(((soldTotal / total) * 100).toFixed(1)) },
             sinVender: { count: counts.DL, percentage: Number(((counts.DL / total) * 100).toFixed(1)) },
             total: { count: total, percentage: 100 }
@@ -625,6 +679,9 @@ export default function App() {
         { label: 'LISTOS PARA ENTREGA', value: statCounts.listos.count.toString(), percentage: `${statCounts.listos.percentage}%`, icon: Clock, color: 'text-blue-700', bg: 'bg-blue-500 hover:bg-blue-600', border: 'border-transparent', textLight: true },
         { label: 'CON OBSERVACIONES', value: statCounts.observaciones.count.toString(), percentage: `${statCounts.observaciones.percentage}%`, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-500 hover:bg-amber-600', border: 'border-transparent', textLight: true, clickable: true, onClick: () => setActiveTab('OBSERVATIONS') },
         { label: 'SIN VISITA (VENDIDOS)', value: statCounts.sinVisita.count.toString(), percentage: `${statCounts.sinVisita.percentage}%`, icon: UserX, color: 'text-gray-700', bg: 'bg-gray-400 hover:bg-gray-500', border: 'border-transparent', textLight: true },
+        { label: 'R1 - REVISIÓN 1', value: statCounts.revision1.count.toString(), percentage: `${statCounts.revision1.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
+        { label: 'R2 - REVISIÓN 2', value: statCounts.revision2.count.toString(), percentage: `${statCounts.revision2.percentage}%`, icon: Construction, color: 'text-blue-700', bg: 'bg-blue-500 hover:bg-blue-600', border: 'border-transparent', textLight: true },
+        { label: 'R3 - REVISIÓN 3', value: statCounts.revision3.count.toString(), percentage: `${statCounts.revision3.percentage}%`, icon: Construction, color: 'text-green-700', bg: 'bg-green-500 hover:bg-green-600', border: 'border-transparent', textLight: true },
     ];
 
     if (view === 'HOME') {
@@ -1041,7 +1098,7 @@ export default function App() {
                                             <div className="hidden lg:group-hover:block absolute top-[calc(100%-10px)] right-0 pt-[10px] z-50 min-w-[240px]">
                                                 <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-2xl p-2.5">
                                                     <button onClick={() => setFilterStatus('ALL')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl font-bold text-gray-600">Ver Todo</button>
-                                                    {Array.from(new Set(['E', 'LE', 'OBS', 'SV', 'DL'])).map((code) => {
+                                                    {Array.from(new Set(['E', 'LE', 'OBS', 'SV', 'DL', 'R1', 'R2', 'R3'])).map((code) => {
                                                         const config = STATUS_CONFIG[code];
                                                         return (
                                                             <button key={code} onClick={() => setFilterStatus(code as UnitStatus)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-3">
@@ -1070,31 +1127,32 @@ export default function App() {
                                         const isMainCard = index < 3;
                                         const isClickable = (stat as any).clickable;
                                         return (
-                                        <div 
-                                            key={stat.label} 
-                                            onClick={() => isClickable && (stat as any).onClick()}
-                                            className={`${stat.bg} border ${stat.border} ${isMainCard ? 'p-6 lg:p-7' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl dark:border-zinc-800 shadow-sm transition-all duration-500 group relative overflow-hidden flex flex-col justify-between h-full ${isClickable ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
-                                        >
-                                            <div className="flex items-center justify-between mb-2 lg:mb-4">
-                                                <div className={`p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-white/90 dark:bg-zinc-800 ${stat.color} shadow-sm`}>
-                                                    <stat.icon size={18} className="lg:size-5.5" />
+                                            <div
+                                                key={stat.label}
+                                                onClick={() => isClickable && (stat as any).onClick()}
+                                                className={`${stat.bg} border ${stat.border} ${isMainCard ? 'p-6 lg:p-7' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl dark:border-zinc-800 shadow-sm transition-all duration-500 group relative overflow-hidden flex flex-col justify-between h-full ${isClickable ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
+                                            >
+                                                <div className="flex items-center justify-between mb-2 lg:mb-4">
+                                                    <div className={`p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-white/90 dark:bg-zinc-800 ${stat.color} shadow-sm`}>
+                                                        <stat.icon size={18} className="lg:size-5.5" />
+                                                    </div>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className={`text-xs lg:text-[14px] font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} ${isExporting ? 'px-3 py-1 inline-block leading-none' : 'px-2 lg:px-2.5 py-0.5'}`}>{stat.percentage}</span>
+                                                        <span className={`text-[7px] lg:text-[8px] font-bold ${stat.textLight ? 'text-white/90' : 'text-gray-400'} mt-1 uppercase tracking-tighter text-right`}>
+                                                            {stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas'}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className={`text-xs lg:text-[14px] font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} ${isExporting ? 'px-3 py-1 inline-block leading-none' : 'px-2 lg:px-2.5 py-0.5'}`}>{stat.percentage}</span>
-                                                    <span className={`text-[7px] lg:text-[8px] font-bold ${stat.textLight ? 'text-white/90' : 'text-gray-400'} mt-1 uppercase tracking-tighter text-right`}>
-                                                        {stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas'}
-                                                    </span>
+                                                <div>
+                                                    <h3 className={`text-[9px] lg:text-[10px] font-black ${stat.textLight ? 'text-white/95' : 'text-gray-500'} uppercase tracking-wider leading-tight min-h-[2em]`}>{stat.label}</h3>
+                                                    <div className="flex items-baseline gap-1 mt-1 lg:mt-2">
+                                                        <p className={`text-xl lg:text-3xl font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{stat.value}</p>
+                                                        <span className={`text-[8px] lg:text-[10px] font-bold ${stat.textLight ? 'text-white/80' : 'text-gray-400'} uppercase tracking-widest shrink-0`}>u.</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div>
-                                                <h3 className={`text-[9px] lg:text-[10px] font-black ${stat.textLight ? 'text-white/95' : 'text-gray-500'} uppercase tracking-wider leading-tight min-h-[2em]`}>{stat.label}</h3>
-                                                <div className="flex items-baseline gap-1 mt-1 lg:mt-2">
-                                                    <p className={`text-xl lg:text-3xl font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{stat.value}</p>
-                                                    <span className={`text-[8px] lg:text-[10px] font-bold ${stat.textLight ? 'text-white/80' : 'text-gray-400'} uppercase tracking-widest shrink-0`}>u.</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )})}
+                                        )
+                                    })}
                                 </div>
 
                                 {/* Matrix Container */}
@@ -1106,7 +1164,7 @@ export default function App() {
                                         </div>
                                         <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-center">
                                             <div className="flex gap-4 lg:gap-5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 scrollbar-hide">
-                                                {['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE'].map((label) => {
+                                                {['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE', 'R1', 'R2', 'R3'].map((label) => {
                                                     const config = STATUS_CONFIG[label];
                                                     return (
                                                         <div key={label} className="flex items-center gap-1.5 lg:gap-2 whitespace-nowrap">
@@ -1140,7 +1198,7 @@ export default function App() {
                                             <div className="space-y-6 max-w-5xl mx-auto">
                                                 <div className="flex items-center justify-between mb-8">
                                                     <h3 className="text-xl lg:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Unidades con Observaciones</h3>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setActiveTab('GRID')}
                                                         className="px-4 py-2 bg-gray-100 dark:bg-zinc-800 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all"
                                                     >
@@ -1168,7 +1226,7 @@ export default function App() {
                                                             const isOverdue = diffDays !== null && diffDays > 15;
 
                                                             return (
-                                                                <div 
+                                                                <div
                                                                     key={u.id}
                                                                     onClick={() => setSelectedUnit(u)}
                                                                     className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer group"
@@ -1176,7 +1234,7 @@ export default function App() {
                                                                     <div className="flex justify-between items-start mb-4">
                                                                         <div className="flex flex-col">
                                                                             <span className="text-xl lg:text-2xl font-black text-gray-900 dark:text-white tracking-tighterest">
-                                                                                Departamento {u.number.replace(/^(U\.|EE\. UU\.|DEPTO\.|UNIDAD)\s*/i, '')}
+                                                                                Departamento {String(u.number).replace(/^(U\.|EE\. UU\.|DEPTO\.|UNIDAD)\s*/i, '')}
                                                                             </span>
                                                                             <div className="flex gap-3 mt-1.5">
                                                                                 <div className="px-2 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-md">
@@ -1219,7 +1277,7 @@ export default function App() {
                                                 <div className={`flex ${selectedProject?.id === 'don-claudio' ? 'gap-1 lg:gap-1.5' : 'gap-2 lg:gap-4'}`}>
                                                     <div className={`${selectedProject?.id === 'don-claudio' ? 'w-10 lg:w-12' : 'w-14 lg:w-20'} shrink-0`}></div>
                                                     <div className={`flex ${selectedProject?.id === 'san-ignacio' ? 'gap-6' : 'gap-1.5'} flex-1 flex-nowrap min-w-max`}>
-                                                        {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(u.number.slice(-2)))) || [17]) }, (_, i) => {
+                                                        {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(String(u.number).slice(-2)))) || [17]) }, (_, i) => {
                                                             const lineNum = i + 1;
                                                             return (
                                                                 <div key={i} className={`${isExporting ? 'min-w-[90px]' : 'w-12 lg:w-16'} text-center`}>
@@ -1229,18 +1287,23 @@ export default function App() {
                                                         })}
                                                     </div>
                                                 </div>
-                                                {floorsData.sort((a, b) => b.floor - a.floor).map((floor) => (
+                                                {floorsData.sort((a, b) => {
+                                                    // Handle string floors like 'LISTADO'
+                                                    const floorA = typeof a.floor === 'string' ? -1 : a.floor;
+                                                    const floorB = typeof b.floor === 'string' ? -1 : b.floor;
+                                                    return (floorB as number) - (floorA as number);
+                                                }).map((floor) => (
                                                     <div key={floor.floor} className={`flex ${selectedProject?.id === 'don-claudio' ? 'gap-1 lg:gap-1.5' : 'gap-2 lg:gap-4'} group floor-row`}>
                                                         <div className={`${selectedProject?.id === 'don-claudio' ? 'w-10 lg:w-12 text-center' : 'w-14 lg:w-20'} shrink-0 ${selectedProject?.id === 'san-ignacio' ? 'pt-1' : 'pt-2'}`}>
                                                             <span className="text-[10px] lg:text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">PISO {floor.floor}</span>
                                                         </div>
                                                         <div className={`flex ${selectedProject?.id === 'san-ignacio' ? 'gap-6' : 'gap-1.5'} flex-1 flex-nowrap min-w-max`}>
-                                                            {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(u.number.slice(-2)))) || [17]) }, (_, i) => {
+                                                            {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(String(u.number).slice(-2)))) || [17]) }, (_, i) => {
                                                                 const lineNum = i + 1;
-                                                                const unit = floor.units.find(u => parseInt(u.number.slice(-2)) === lineNum);
+                                                                const unit = floor.units.find(u => parseInt(String(u.number).slice(-2)) === lineNum);
                                                                 if (!unit) return <div key={`empty-${lineNum}`} className={`${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20'} shrink-0`} />;
                                                                 const isFiltered = filterStatus !== 'ALL' && unit.status !== filterStatus;
-                                                                const matchesSearch = searchTerm === '' || unit.number.toLowerCase().includes(searchTerm.toLowerCase());
+                                                                const matchesSearch = searchTerm === '' || unit.number.toLowerCase().includes(searchTerm.toLowerCase()) || (unit.responsible && unit.responsible.toLowerCase().includes(searchTerm.toLowerCase()));
 
                                                                 if (isFiltered || !matchesSearch) {
                                                                     return <div key={unit.id} className={`${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20'} rounded-lg lg:rounded-xl border border-dotted border-gray-200 opacity-20 shrink-0`}></div>;
@@ -1290,7 +1353,7 @@ export default function App() {
                                                     </thead>
                                                     <tbody>
                                                         {floorsData.flatMap(f => f.units)
-                                                            .filter(u => (filterStatus === 'ALL' || u.status === filterStatus) && (searchTerm === '' || u.number.toLowerCase().includes(searchTerm.toLowerCase())))
+                                                            .filter(u => (filterStatus === 'ALL' || u.status === filterStatus) && (searchTerm === '' || u.number.toLowerCase().includes(searchTerm.toLowerCase()) || (u.responsible && u.responsible.toLowerCase().includes(searchTerm.toLowerCase()))))
                                                             .map(unit => (
                                                                 <tr key={unit.id} onClick={() => setSelectedUnit(unit)} className="bg-white dark:bg-zinc-900 shadow-sm border border-gray-100 rounded-xl cursor-pointer">
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5 rounded-l-xl lg:rounded-l-2xl">
@@ -1411,7 +1474,7 @@ export default function App() {
                                                 </>
                                             )}
                                             {selectedUnit.link_acta && (
-                                                <button 
+                                                <button
                                                     onClick={() => setViewerPdfUrl(selectedUnit.link_acta!)}
                                                     className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-zinc-800 border-2 border-red-500 text-red-600 dark:text-red-400 rounded-2xl text-[10px] lg:text-xs font-black uppercase tracking-widest transition-all shadow-md hover:bg-red-500 hover:text-white dark:hover:bg-red-600 active:scale-95 group"
                                                 >
@@ -1461,6 +1524,20 @@ export default function App() {
                                             <p className="text-lg lg:text-xl font-black text-gray-900 dark:text-white mt-1 lg:mt-2 tracking-tight">{selectedUnit.parkingNumber || '-'}</p>
                                         </div>
                                     </div>
+
+                                    {selectedUnit.observaciones && (
+                                        <>
+                                            <h3 className="text-[10px] lg:text-xs font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-2 pt-4">
+                                                <MessageSquare size={14} />
+                                                Comentarios / Observaciones
+                                            </h3>
+                                            <div className="bg-amber-50/30 dark:bg-zinc-800/80 p-6 rounded-[1.5rem] border border-amber-100/30 dark:border-zinc-800">
+                                                <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 italic leading-relaxed">
+                                                    "{selectedUnit.observaciones}"
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                             <div className="p-6 lg:p-10 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-20 shrink-0">
