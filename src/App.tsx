@@ -41,7 +41,7 @@ import {
 
 
 // Types
-type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R' | 'R0' | 'RECEPCIONADO';
+type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R' | 'R0' | 'RECEPCIONADO' | 'REC';
 
 interface Unit {
     id: string;
@@ -114,7 +114,7 @@ const PROJECTS: Project[] = [
         units: 150,
         progress: 10,
         image: '/projects/don-diego.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbzR-a8PHxpYbdJ9KOD0ABAN8IvBjqLyrzmc9EqRyRdqQqJl7hpB120ajpbTeZLoh297VQ/exec',
+        gasUrl: 'https://script.google.com/macros/s/AKfycbyP9nwBI3Vms9jCJMTZNOY9GrL0ObmIHMAwTZxT4bswt24JdMXQwQrMK9h-HLtZnxAjMA/exec',
         stage: 'CONSTRUCCION'
     }
 ];
@@ -168,10 +168,11 @@ const STATUS_CONFIG: Record<string, { label: string, short: string, color: strin
 };
 
 const CONSTRUCTION_STATUS_CONFIG: Record<string, { label: string, short: string, color: string, bg: string }> = {
-    'R0': { label: 'R0 - SIN INICIAR', short: 'R0', color: 'text-gray-400', bg: 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700' },
-    'R1': { label: 'R1 - PRIMERA REVISIÓN', short: 'R1', color: 'text-white', bg: 'bg-red-500' },
-    'R2': { label: 'R2 - SEGUNDA REVISIÓN', short: 'R2', color: 'text-white', bg: 'bg-orange-500' },
-    'R3': { label: 'R3 - TERCERA REVISIÓN', short: 'R3', color: 'text-gray-900', bg: 'bg-yellow-400' },
+    'R0': { label: 'SIN INICIAR', short: 'R0', color: 'text-gray-400', bg: 'bg-white dark:bg-zinc-800 border-2 border-gray-100 dark:border-zinc-700 shadow-sm' },
+    'R1': { label: 'PRIMERA REVISIÓN', short: 'R1', color: 'text-white', bg: 'bg-red-500' },
+    'R2': { label: 'SEGUNDA REVISIÓN', short: 'R2', color: 'text-white', bg: 'bg-orange-500' },
+    'R3': { label: 'TERCERA REVISIÓN', short: 'R3', color: 'text-gray-900', bg: 'bg-yellow-400' },
+    'REC': { label: 'RECEPCIONADO', short: 'REC', color: 'text-white', bg: 'bg-green-500' },
     'RECEPCIONADO': { label: 'RECEPCIONADO', short: 'REC', color: 'text-white', bg: 'bg-green-500' },
 };
 
@@ -436,6 +437,26 @@ export default function App() {
                         };
                     })
                 }];
+            } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+                // New logic for object structure { "PISO X": [...], ... }
+                normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
+                    floor: floorName.replace(/[^\d]/g, '') || floorName,
+                    units: (Array.isArray(units) ? units : []).map((u: any) => {
+                        const deptoVal = u.depto || u['depto.'] || u.number || u.unidad;
+                        return {
+                            id: String(deptoVal),
+                            number: String(deptoVal),
+                            floor: parseInt(floorName.replace(/[^\d]/g, '')) || 0,
+                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.responsible || u.PROPIETARIO || 'SIN ASIGNAR',
+                            parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || u.estacionamiento || '-',
+                            storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || u.bodega || '-',
+                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
+                            type: 'DEPARTAMENTO' as const,
+                            ...u
+                        };
+                    })
+                })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
             } else if (Array.isArray(data)) {
                 // Standard structure processing
                 normalizedData = data.map((f: any) => ({
@@ -638,7 +659,7 @@ export default function App() {
     };
 
     const statCounts = useMemo(() => {
-        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R0: 0, R1: 0, R2: 0, R3: 0, RECEPCIONADO: 0 };
+        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R0: 0, R1: 0, R2: 0, R3: 0, REC: 0 };
         const isConstruction = selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego';
         
         floorsData.forEach(f => {
@@ -647,11 +668,10 @@ export default function App() {
                 let canonical = u.status;
                 
                 if (isConstruction) {
-                    if (s === 'R0' || s === 'SIN INICIAR' || s === 'S/R' || s === '') canonical = 'R0';
-                    else if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') canonical = 'R1';
+                    if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') canonical = 'R1';
                     else if (s === 'R2' || s === 'REVISION 2' || s === 'SEGUNDA REVISIÓN') canonical = 'R2';
                     else if (s === 'R3' || s === 'REVISION 3' || s === 'TERCERA REVISIÓN') canonical = 'R3';
-                    else if (s === 'RECEPCIONADO' || s === 'REC' || s === 'RECEPCIONADOS') canonical = 'RECEPCIONADO';
+                    else if (s === 'REC' || s === 'RECEPCIONADO' || s === 'RECEPCIONADOS') canonical = 'REC';
                     else canonical = 'R0';
                 } else {
                     if (s === 'MI' || s === 'ENTREGADO' || s === 'E') canonical = 'E';
@@ -682,7 +702,7 @@ export default function App() {
             r1: { count: counts.R1, percentage: Number(((counts.R1 / total) * 100).toFixed(1)) },
             r2: { count: counts.R2, percentage: Number(((counts.R2 / total) * 100).toFixed(1)) },
             r3: { count: counts.R3, percentage: Number(((counts.R3 / total) * 100).toFixed(1)) },
-            recepcionado: { count: counts.RECEPCIONADO, percentage: Number(((counts.RECEPCIONADO / total) * 100).toFixed(1)) },
+            recepcionado: { count: counts.REC, percentage: Number(((counts.REC / total) * 100).toFixed(1)) },
             
             vendidos: { count: soldTotal, percentage: Number(((soldTotal / total) * 100).toFixed(1)) },
             sinVender: { count: counts.DL, percentage: Number(((counts.DL / total) * 100).toFixed(1)) },
@@ -1120,7 +1140,7 @@ export default function App() {
                                             <div className="hidden lg:group-hover:block absolute top-[calc(100%-10px)] right-0 pt-[10px] z-50 min-w-[240px]">
                                                 <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-2xl p-2.5">
                                                     <button onClick={() => setFilterStatus('ALL')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl font-bold text-gray-600">Ver Todo</button>
-                                                    {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
+                                                    {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
                                                         const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
                                                         return (
                                                             <button key={code} onClick={() => setFilterStatus(code as UnitStatus)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-3">
@@ -1186,7 +1206,7 @@ export default function App() {
                                         </div>
                                         <div className="flex col-span-full py-4 border-y border-gray-100 dark:border-zinc-800 overflow-x-auto scrollbar-hide">
                                             <div className="flex gap-4 lg:gap-6 lg:items-center min-w-max">
-                                                {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
+                                                {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
                                                     const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[label] || ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG[label] : STATUS_CONFIG[label]);
                                                     return (
                                                         <div key={label} className="flex items-center gap-1.5 lg:gap-2 whitespace-nowrap">
