@@ -478,6 +478,7 @@ export default function App() {
                                 parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
                                 storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                                 fecha_obs: obsDate,
+                                link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
                                 observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                                 type: 'DEPARTAMENTO' as const,
                                 ...u
@@ -506,6 +507,7 @@ export default function App() {
                                 parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
                                 storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                                 fecha_obs: obsDate,
+                                link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
                                 observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                                 type: 'DEPARTAMENTO' as const,
                                 ...u
@@ -535,6 +537,7 @@ export default function App() {
                             parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
                             storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             fecha_obs: obsDate,
+                            link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                             type: 'DEPARTAMENTO' as const,
                             ...u
