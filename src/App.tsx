@@ -957,11 +957,11 @@ export default function App() {
             {/* Sidebar (Desktop only) */}
             <aside className="hidden lg:flex w-20 hover:w-64 border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-col shadow-sm transition-all duration-300 group overflow-hidden z-50">
                 <div className="p-4 group-hover:p-6 transition-all duration-300">
-                    <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 mb-8 cursor-pointer transition-all duration-300" onClick={() => setView('SELECT')}>
+                    <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 mb-8 cursor-pointer transition-all duration-300" onClick={() => setView('HOME')}>
                         <div className="w-10 h-10 bg-black dark:bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/10 shrink-0">
                             <Construction className="text-white dark:text-black w-6 h-6" />
                         </div>
-                        <span className="font-bold text-base tracking-tighter opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap w-0 group-hover:w-auto overflow-hidden text-clip dark:text-white">BuildFlow</span>
+                        <span className="font-bold text-base tracking-tighter opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap w-0 group-hover:w-auto overflow-hidden text-clip dark:text-white">Flujo de construcción</span>
                     </div>
 
                     <div className="space-y-1.5 focus-within:ring-0">
@@ -1007,7 +1007,7 @@ export default function App() {
 
                 <div className="mt-auto p-4 border-t border-gray-100 dark:border-zinc-800">
                     <button
-                        onClick={() => setView('SELECT')}
+                        onClick={() => setView('HOME')}
                         className="w-full flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-4 py-3 px-3 text-xs font-black text-gray-400 hover:text-black dark:hover:text-white uppercase tracking-widest transition-all mb-4"
                     >
                         <ArrowRight size={22} className="rotate-180 shrink-0" />
@@ -1040,7 +1040,7 @@ export default function App() {
                     {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
                     <span className="text-[10px] font-black uppercase">{isDarkMode ? 'Claro' : 'Oscuro'}</span>
                 </button>
-                <div className="w-12 h-12 bg-black dark:bg-white rounded-2xl flex items-center justify-center shadow-lg -translate-y-6 border-4 border-[#F9FAFB] dark:border-zinc-950 transition-all active:scale-95" onClick={() => setView('SELECT')}>
+                <div className="w-12 h-12 bg-black dark:bg-white rounded-2xl flex items-center justify-center shadow-lg -translate-y-6 border-4 border-[#F9FAFB] dark:border-zinc-950 transition-all active:scale-95" onClick={() => setView('HOME')}>
                     <Construction className="text-white dark:text-black w-6 h-6" />
                 </div>
                 <button
@@ -1065,7 +1065,7 @@ export default function App() {
                 <header className="h-16 lg:h-20 border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 lg:px-8 flex items-center justify-between transition-colors duration-500 shrink-0">
                     <div className="flex items-center gap-2 lg:gap-6">
                         <div
-                            onClick={() => setView('SELECT')}
+                            onClick={() => setView('HOME')}
                             className="flex items-center gap-2 lg:gap-3 px-3 lg:px-4 py-2 border border-gray-200 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-800 shadow-sm cursor-pointer hover:border-gray-900 dark:hover:border-white transition-all group"
                         >
                             <span className="text-xs lg:text-sm font-bold text-gray-700 dark:text-gray-300 truncate max-w-[120px] lg:max-w-none">{selectedProject?.name}</span>
