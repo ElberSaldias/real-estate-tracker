@@ -41,7 +41,7 @@ import {
 
 
 // Types
-type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R';
+type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R' | 'R0' | 'RECEPCIONADO';
 
 interface Unit {
     id: string;
@@ -111,7 +111,7 @@ const PROJECTS: Project[] = [
         id: 'don-diego',
         name: 'DON DIEGO',
         location: 'Antofagasta, Chile',
-        units: 148,
+        units: 150,
         progress: 10,
         image: '/projects/don-diego.png',
         gasUrl: 'https://script.google.com/macros/s/AKfycbzR-a8PHxpYbdJ9KOD0ABAN8IvBjqLyrzmc9EqRyRdqQqJl7hpB120ajpbTeZLoh297VQ/exec',
@@ -165,10 +165,14 @@ const STATUS_CONFIG: Record<string, { label: string, short: string, color: strin
     'SIN VISITA': { label: 'SIN VISITA', short: 'SV', color: 'text-gray-600', bg: 'bg-gray-400' },
     'DL': { label: 'DEPARTAMENTO LIBRE', short: 'DL', color: 'text-slate-600', bg: 'bg-slate-300' },
     'DEPARTAMENTO LIBRE': { label: 'DEPARTAMENTO LIBRE', short: 'DL', color: 'text-slate-600', bg: 'bg-slate-300' },
-    'R1': { label: 'R1 - REVISIÓN 1', short: 'R1', color: 'text-orange-600', bg: 'bg-orange-500' },
-    'R2': { label: 'R2 - REVISIÓN 2', short: 'R2', color: 'text-blue-600', bg: 'bg-blue-500' },
-    'R3': { label: 'R3 - REVISIÓN 3', short: 'R3', color: 'text-green-600', bg: 'bg-green-500' },
-    'S/R': { label: 'SIN REVISIÓN', short: 'S/R', color: 'text-gray-400', bg: 'bg-gray-300' },
+};
+
+const CONSTRUCTION_STATUS_CONFIG: Record<string, { label: string, short: string, color: string, bg: string }> = {
+    'R0': { label: 'R0 - SIN INICIAR', short: 'R0', color: 'text-gray-400', bg: 'bg-white dark:bg-zinc-800 border-gray-200 dark:border-zinc-700' },
+    'R1': { label: 'R1 - PRIMERA REVISIÓN', short: 'R1', color: 'text-white', bg: 'bg-red-500' },
+    'R2': { label: 'R2 - SEGUNDA REVISIÓN', short: 'R2', color: 'text-white', bg: 'bg-orange-500' },
+    'R3': { label: 'R3 - TERCERA REVISIÓN', short: 'R3', color: 'text-gray-900', bg: 'bg-yellow-400' },
+    'RECEPCIONADO': { label: 'RECEPCIONADO', short: 'REC', color: 'text-white', bg: 'bg-green-500' },
 };
 
 const generateProjectData = (projectId: string) => {
@@ -634,47 +638,63 @@ export default function App() {
     };
 
     const statCounts = useMemo(() => {
-        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R1: 0, R2: 0, R3: 0 };
+        const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R0: 0, R1: 0, R2: 0, R3: 0, RECEPCIONADO: 0 };
         floorsData.forEach(f => {
             f.units.forEach(u => {
                 const s = u.status.trim().toUpperCase();
                 let canonical = u.status;
-                if (s === 'MI' || s === 'ENTREGADO' || s === 'E') canonical = 'E';
-                else if (s === 'OBSERVACIÓN' || s === 'OBSERVACION' || s === 'CON OBSERVACIONES' || s === 'OBS') canonical = 'OBS';
-                else if (s === 'LISTO PARA ENTREGA' || s === 'LE') canonical = 'LE';
-                else if (s === 'SIN VISITA' || s === 'SV') canonical = 'SV';
-                else if (s === 'DEPARTAMENTO LIBRE' || s === 'DL') canonical = 'DL';
-                else if (s === 'R1' || s === 'REVISION 1') canonical = 'R1';
-                else if (s === 'R2' || s === 'REVISION 2') canonical = 'R2';
-                else if (s === 'R3' || s === 'REVISION 3') canonical = 'R3';
-
+                
+                if (selectedProject?.stage === 'CONSTRUCCION') {
+                    if (s === 'R0' || s === 'SIN INICIAR' || s === 'S/R' || s === '') canonical = 'R0';
+                    else if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') canonical = 'R1';
+                    else if (s === 'R2' || s === 'REVISION 2' || s === 'SEGUNDA REVISIÓN') canonical = 'R2';
+                    else if (s === 'R3' || s === 'REVISION 3' || s === 'TERCERA REVISIÓN') canonical = 'R3';
+                    else if (s === 'RECEPCIONADO' || s === 'REC' || s === 'RECEPCIONADOS') canonical = 'RECEPCIONADO';
+                    else canonical = 'R0';
+                } else {
+                    if (s === 'MI' || s === 'ENTREGADO' || s === 'E') canonical = 'E';
+                    else if (s === 'OBSERVACIÓN' || s === 'OBSERVACION' || s === 'CON OBSERVACIONES' || s === 'OBS') canonical = 'OBS';
+                    else if (s === 'LISTO PARA ENTREGA' || s === 'LE') canonical = 'LE';
+                    else if (s === 'SIN VISITA' || s === 'SV') canonical = 'SV';
+                    else if (s === 'DEPARTAMENTO LIBRE' || s === 'DL') canonical = 'DL';
+                }
 
                 if (canonical in counts) {
                     counts[canonical as keyof typeof counts]++;
                 }
             });
         });
+
         const total = selectedProject?.units || 1;
         const soldTotal = total - counts.DL;
         const visited = counts.E + counts.LE + counts.OBS;
 
-        // Use soldTotal as denominator for status percentages, but total for sold percentage
         return {
             visited: { count: visited, percentage: Number(((visited / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             entregados: { count: counts.E, percentage: Number(((counts.E / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             listos: { count: counts.LE, percentage: Number(((counts.LE / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             observaciones: { count: counts.OBS, percentage: Number(((counts.OBS / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
             sinVisita: { count: counts.SV, percentage: Number(((counts.SV / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            revision1: { count: counts.R1, percentage: Number(((counts.R1 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            revision2: { count: counts.R2, percentage: Number(((counts.R2 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            revision3: { count: counts.R3, percentage: Number(((counts.R3 / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            
+            r0: { count: counts.R0, percentage: Number(((counts.R0 / total) * 100).toFixed(1)) },
+            r1: { count: counts.R1, percentage: Number(((counts.R1 / total) * 100).toFixed(1)) },
+            r2: { count: counts.R2, percentage: Number(((counts.R2 / total) * 100).toFixed(1)) },
+            r3: { count: counts.R3, percentage: Number(((counts.R3 / total) * 100).toFixed(1)) },
+            recepcionado: { count: counts.RECEPCIONADO, percentage: Number(((counts.RECEPCIONADO / total) * 100).toFixed(1)) },
+            
             vendidos: { count: soldTotal, percentage: Number(((soldTotal / total) * 100).toFixed(1)) },
             sinVender: { count: counts.DL, percentage: Number(((counts.DL / total) * 100).toFixed(1)) },
             total: { count: total, percentage: 100 }
         };
     }, [floorsData, selectedProject]);
 
-    const stats = [
+    const stats = selectedProject?.stage === 'CONSTRUCCION' ? [
+        { label: 'R0 - SIN INICIAR', value: statCounts.r0.count.toString(), percentage: `${statCounts.r0.percentage}%`, icon: Construction, color: 'text-gray-500', bg: 'bg-white dark:bg-zinc-900 border-2 border-gray-100 dark:border-zinc-800', textLight: false },
+        { label: 'R1 - PRIMERA REVISIÓN', value: statCounts.r1.count.toString(), percentage: `${statCounts.r1.percentage}%`, icon: Construction, color: 'text-red-700', bg: 'bg-red-500 hover:bg-red-600', border: 'border-transparent', textLight: true },
+        { label: 'R2 - SEGUNDA REVISIÓN', value: statCounts.r2.count.toString(), percentage: `${statCounts.r2.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
+        { label: 'R3 - TERCERA REVISIÓN', value: statCounts.r3.count.toString(), percentage: `${statCounts.r3.percentage}%`, icon: Construction, color: 'text-yellow-700', bg: 'bg-yellow-400 hover:bg-yellow-500', border: 'border-transparent', textLight: false },
+        { label: 'RECEPCIONADOS', value: statCounts.recepcionado.count.toString(), percentage: `${statCounts.recepcionado.percentage}%`, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-500 hover:bg-green-600', border: 'border-transparent', textLight: true },
+    ] : [
         { label: 'TOTAL UNIDADES', value: statCounts.total.count.toString(), percentage: '100%', icon: Layers, color: 'text-gray-900', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
         { label: 'DEPARTAMENTOS VENDIDOS', value: statCounts.vendidos.count.toString(), percentage: `${statCounts.vendidos.percentage}%`, icon: Key, color: 'text-indigo-700', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
         { label: 'DEPTOS. VISITADOS', value: statCounts.visited.count.toString(), percentage: `${statCounts.visited.percentage}%`, icon: Eye, color: 'text-blue-700', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
@@ -682,9 +702,6 @@ export default function App() {
         { label: 'LISTOS PARA ENTREGA', value: statCounts.listos.count.toString(), percentage: `${statCounts.listos.percentage}%`, icon: Clock, color: 'text-blue-700', bg: 'bg-blue-500 hover:bg-blue-600', border: 'border-transparent', textLight: true },
         { label: 'CON OBSERVACIONES', value: statCounts.observaciones.count.toString(), percentage: `${statCounts.observaciones.percentage}%`, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-500 hover:bg-amber-600', border: 'border-transparent', textLight: true, clickable: true, onClick: () => setActiveTab('OBSERVATIONS') },
         { label: 'SIN VISITA (VENDIDOS)', value: statCounts.sinVisita.count.toString(), percentage: `${statCounts.sinVisita.percentage}%`, icon: UserX, color: 'text-gray-700', bg: 'bg-gray-400 hover:bg-gray-500', border: 'border-transparent', textLight: true },
-        { label: 'R1 - REVISIÓN 1', value: statCounts.revision1.count.toString(), percentage: `${statCounts.revision1.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
-        { label: 'R2 - REVISIÓN 2', value: statCounts.revision2.count.toString(), percentage: `${statCounts.revision2.percentage}%`, icon: Construction, color: 'text-blue-700', bg: 'bg-blue-500 hover:bg-blue-600', border: 'border-transparent', textLight: true },
-        { label: 'R3 - REVISIÓN 3', value: statCounts.revision3.count.toString(), percentage: `${statCounts.revision3.percentage}%`, icon: Construction, color: 'text-green-700', bg: 'bg-green-500 hover:bg-green-600', border: 'border-transparent', textLight: true },
     ];
 
     if (view === 'HOME') {
@@ -1101,8 +1118,8 @@ export default function App() {
                                             <div className="hidden lg:group-hover:block absolute top-[calc(100%-10px)] right-0 pt-[10px] z-50 min-w-[240px]">
                                                 <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-2xl p-2.5">
                                                     <button onClick={() => setFilterStatus('ALL')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl font-bold text-gray-600">Ver Todo</button>
-                                                    {Array.from(new Set(['E', 'LE', 'OBS', 'SV', 'DL', 'R1', 'R2', 'R3'])).map((code) => {
-                                                        const config = STATUS_CONFIG[code];
+                                                    {(selectedProject?.stage === 'CONSTRUCCION' ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
+                                                        const config = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
                                                         return (
                                                             <button key={code} onClick={() => setFilterStatus(code as UnitStatus)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-3">
                                                                 <div className={`w-3 h-3 rounded-full ${config.bg}`}></div>
@@ -1165,34 +1182,34 @@ export default function App() {
                                             <h2 className="text-lg lg:text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">Matriz de Unidades</h2>
                                             <p className="text-xs lg:text-sm text-gray-500 dark:text-zinc-400 mt-1 lg:mt-2 font-medium">Arquitectura visual del proyecto: {selectedProject?.name}</p>
                                         </div>
-                                        <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-center">
-                                            <div className="flex gap-4 lg:gap-5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 scrollbar-hide">
-                                                {['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE', 'R1', 'R2', 'R3'].map((label) => {
-                                                    const config = STATUS_CONFIG[label];
+                                        <div className="flex col-span-full py-4 border-y border-gray-100 dark:border-zinc-800 overflow-x-auto scrollbar-hide">
+                                            <div className="flex gap-4 lg:gap-6 lg:items-center min-w-max">
+                                                {(selectedProject?.stage === 'CONSTRUCCION' ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
+                                                    const config = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[label] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[label] : STATUS_CONFIG[label]);
                                                     return (
                                                         <div key={label} className="flex items-center gap-1.5 lg:gap-2 whitespace-nowrap">
-                                                            <div className={`w-2.5 lg:w-3.5 h-2.5 lg:h-3.5 rounded-full ${config.bg}`}></div>
-                                                            <span className="text-[9px] lg:text-[11px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest leading-tight">
-                                                                {label}
+                                                            <div className={`w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full ${config?.bg || 'bg-gray-200'}`}></div>
+                                                            <span className="text-[9px] lg:text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest leading-none">
+                                                                {config?.label || label}
                                                             </span>
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                            <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl lg:rounded-2xl border border-transparent shadow-inner w-fit self-center lg:self-auto">
-                                                <button
-                                                    onClick={() => setActiveTab('GRID')}
-                                                    className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'GRID' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400'}`}
-                                                >
-                                                    DIAGRAMA
-                                                </button>
-                                                <button
-                                                    onClick={() => setActiveTab('TABLE')}
-                                                    className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'TABLE' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white cursor-pointer'}`}
-                                                >
-                                                    DETALLE
-                                                </button>
-                                            </div>
+                                        </div>
+                                        <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl lg:rounded-2xl border border-transparent shadow-inner w-fit self-center lg:self-auto">
+                                            <button
+                                                onClick={() => setActiveTab('GRID')}
+                                                className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'GRID' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400'}`}
+                                            >
+                                                DIAGRAMA
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab('TABLE')}
+                                                className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'TABLE' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white cursor-pointer'}`}
+                                            >
+                                                DETALLE
+                                            </button>
                                         </div>
                                     </div>
 
@@ -1361,12 +1378,12 @@ export default function App() {
                                                                 <tr key={unit.id} onClick={() => setSelectedUnit(unit)} className="bg-white dark:bg-zinc-900 shadow-sm border border-gray-100 rounded-xl cursor-pointer">
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5 rounded-l-xl lg:rounded-l-2xl">
                                                                         {(() => {
-                                                                            const sc = STATUS_CONFIG[unit.status.trim().toUpperCase()] || STATUS_CONFIG[unit.status] || { label: unit.status, bg: 'bg-gray-400' };
-                                                                            return (
-                                                                                <div className="flex items-center gap-3">
-                                                                                    <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${sc.bg}`}></div>
-                                                                                    <span className="font-black text-gray-900 dark:text-white text-sm lg:text-base">{unit.number}</span>
-                                                                                </div>
+                                                                                    const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[unit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[unit.status] : STATUS_CONFIG[unit.status]) || { label: unit.status, bg: 'bg-gray-400' };
+                                                                                    return (
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${sc.bg}`}></div>
+                                                                                            <span className="font-black text-gray-900 dark:text-white text-sm lg:text-base">{unit.number}</span>
+                                                                                        </div>
                                                                             );
                                                                         })()}
                                                                     </td>
@@ -1381,12 +1398,12 @@ export default function App() {
                                                                     </td>
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5">
                                                                         {(() => {
-                                                                            const sc = STATUS_CONFIG[unit.status.trim().toUpperCase()] || STATUS_CONFIG[unit.status] || { label: unit.status, bg: 'bg-gray-400' };
-                                                                            return (
-                                                                                <span className={`px-3 lg:px-4 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase text-white ${sc.bg}`}>
-                                                                                    {sc.label}
-                                                                                </span>
-                                                                            );
+                                                                                const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[unit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[unit.status] : STATUS_CONFIG[unit.status]) || { label: unit.status, bg: 'bg-gray-400' };
+                                                                                return (
+                                                                                    <span className={`px-3 lg:px-4 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase ${sc.color === 'text-white' || sc.color === 'text-gray-900' ? 'text-current' : 'text-white'} ${sc.bg}`}>
+                                                                                        {sc.label}
+                                                                                    </span>
+                                                                                );
                                                                         })()}
                                                                     </td>
                                                                     <td className="hidden lg:table-cell px-8 py-5">
@@ -1420,9 +1437,9 @@ export default function App() {
                                     <div className="flex items-center gap-4">
                                         <h2 className="text-xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tighterest">Unidad {selectedUnit.number}</h2>
                                         {(() => {
-                                            const sc = STATUS_CONFIG[selectedUnit.status.trim().toUpperCase()] || STATUS_CONFIG[selectedUnit.status] || { label: selectedUnit.status, bg: 'bg-gray-400' };
+                                            const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[selectedUnit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[selectedUnit.status] : STATUS_CONFIG[selectedUnit.status]) || { label: selectedUnit.status, bg: 'bg-gray-400' };
                                             return (
-                                                <span className={`px-3 lg:px-4 py-1 lg:py-1.5 rounded-full text-[9px] lg:text-[11px] font-black uppercase text-white shadow-lg ${sc.bg}`}>
+                                                <span className={`px-3 lg:px-4 py-1 lg:py-1.5 rounded-full text-[9px] lg:text-[11px] font-black uppercase shadow-lg ${sc.bg} ${sc.color === 'text-white' ? 'text-white' : 'text-gray-900'}`}>
                                                     {sc.label}
                                                 </span>
                                             );
