@@ -704,9 +704,11 @@ export default function App() {
     const statCounts = useMemo(() => {
         const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R0: 0, R1: 0, R2: 0, R3: 0, REC: 0 };
         const isConstruction = selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego';
+        let totalCountedUnits = 0;
         
         floorsData.forEach(f => {
             f.units.forEach(u => {
+                totalCountedUnits++;
                 const s = String(u.status || '').trim().toUpperCase();
                 
                 if (isConstruction) {
@@ -726,9 +728,10 @@ export default function App() {
             });
         });
 
-        const totalCapacity = selectedProject?.units || 150;
+        // For construction, use the actual count of units as the total capacity
+        const totalCapacity = isConstruction ? (totalCountedUnits || selectedProject?.units || 150) : (selectedProject?.units || 150);
         const soldTotal = Math.max(totalCapacity - counts.DL, 1);
-        const calcP = (c: number, t: number) => Number(((c / t) * 100).toFixed(1));
+        const calcP = (c: number, t: number) => Number(((c / (t || 1 || 1)) * 100).toFixed(1));
 
         return {
             // Delivery Stats
