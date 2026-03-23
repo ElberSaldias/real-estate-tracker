@@ -412,22 +412,25 @@ export default function App() {
 
             let normalizedData = [];
 
-            if (Array.isArray(data) && data.length > 0 && typeof data[0].depto !== 'undefined') {
+            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined')) {
                 // If it's a flat list of units (like Don Diego), wrap it in a single floor for compatibility
                 normalizedData = [{
                     floor: 'LISTADO',
-                    units: data.map((u: any) => ({
-                        id: String(u.depto),
-                        number: String(u.depto),
-                        floor: '0',
-                        status: String(u.revisión || u.revision || u.REVISIÓN || u.REVISION || 'S/R').trim().toUpperCase(),
-                        responsible: u.propietario || u.PROPIETARIO || 'SIN ASIGNAR',
-                        parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                        storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                        observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                        type: 'DEPARTAMENTO' as const, // Default type
-                        ...u
-                    }))
+                    units: data.map((u: any) => {
+                        const deptoVal = u.depto || u['depto.'] || u.DEPTO || u.number;
+                        return {
+                            id: String(deptoVal),
+                            number: String(deptoVal),
+                            floor: '0',
+                            status: String(u.revisión || u.revision || u.REVISIÓN || u.REVISION || 'S/R').trim().toUpperCase(),
+                            responsible: u.propietario || u.PROPIETARIO || 'SIN ASIGNAR',
+                            parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
+                            type: 'DEPARTAMENTO' as const, // Default type
+                            ...u
+                        };
+                    })
                 }];
             } else if (Array.isArray(data)) {
                 // Standard structure processing
