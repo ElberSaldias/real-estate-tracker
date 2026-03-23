@@ -450,15 +450,15 @@ export default function App() {
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
                     floor: floorName.replace(/[^\d]/g, '') || floorName,
                     units: (Array.isArray(units) ? units : []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.unidad || u.id;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad;
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
-                            floor: parseInt(floorName.replace(/[^\d]/g, '')) || 0,
+                            floor: u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
                             status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.responsible || u.PROPIETARIO || 'SIN ASIGNAR',
-                            parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || u.estacionamiento || '-',
-                            storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || u.bodega || '-',
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
                             type: 'DEPARTAMENTO' as const,
                             ...u
@@ -1366,7 +1366,11 @@ export default function App() {
                                                                 return (
                                                                     <div
                                                                         key={unit.id}
-                                                                        onClick={() => setSelectedUnit(unit)}
+                                                                        onClick={() => {
+                                                                            setSearchTerm(unit.number);
+                                                                            setActiveTab('TABLE');
+                                                                            window.scrollTo({ top: document.querySelector('table')?.offsetTop || 1000, behavior: 'smooth' });
+                                                                        }}
                                                                         title={`Depto: ${unit.number}\nPropietario: ${unit.responsible || 'Sin asignar'}`}
                                                                         className={`relative ${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20 unit-hover-effect'} rounded-lg lg:rounded-xl flex flex-col items-center justify-center border-2 border-transparent shadow-md ${sc.bg} text-white transition-all duration-300 cursor-pointer active:scale-95 shrink-0`}
                                                                     >
@@ -1419,7 +1423,7 @@ export default function App() {
                                                                         })()}
                                                                     </td>
                                                                     <td className="hidden lg:table-cell px-8 py-5">
-                                                                        <span className="text-sm font-bold text-gray-600">PISO {unit.floor}</span>
+                                                                        <span className="text-sm font-bold text-gray-600">{unit.floor}</span>
                                                                     </td>
                                                                     <td className="hidden lg:table-cell px-8 py-5">
                                                                         <span className="text-sm font-bold text-gray-600 truncate max-w-[100px] block">{unit.storageNumber || '-'}</span>
