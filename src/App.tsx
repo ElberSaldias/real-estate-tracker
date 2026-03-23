@@ -72,6 +72,7 @@ interface Project {
     progress: number;
     image: string;
     gasUrl?: string;
+    stage: 'CONSTRUCCION' | 'ENTREGA';
 }
 
 const PROJECTS: Project[] = [
@@ -82,7 +83,8 @@ const PROJECTS: Project[] = [
         units: 246,
         progress: 15,
         image: '/projects/carvajal-330-v2.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbyMiUHLZKGgQ7VDq22nXna9mCOeap2c8TDpwXgXVWDPcYzXlGLWTGKS2xfMoEFbm6JeZw/exec'
+        gasUrl: 'https://script.google.com/macros/s/AKfycbyMiUHLZKGgQ7VDq22nXna9mCOeap2c8TDpwXgXVWDPcYzXlGLWTGKS2xfMoEFbm6JeZw/exec',
+        stage: 'ENTREGA'
     },
     {
         id: 'san-ignacio',
@@ -91,7 +93,8 @@ const PROJECTS: Project[] = [
         units: 129,
         progress: 28,
         image: '/projects/san-ignacio-lazcano-v2.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbz0c_bGXRJdb3OUPmp1W0eGyuT8WiFWBALbYMJfR4lEq7wH9yapIIRts0l0ytlFamuAsw/exec'
+        gasUrl: 'https://script.google.com/macros/s/AKfycbz0c_bGXRJdb3OUPmp1W0eGyuT8WiFWBALbYMJfR4lEq7wH9yapIIRts0l0ytlFamuAsw/exec',
+        stage: 'ENTREGA'
     },
     {
         id: 'don-claudio',
@@ -100,7 +103,17 @@ const PROJECTS: Project[] = [
         units: 194,
         progress: 45,
         image: '/projects/don-claudio-v2.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbzEac1346p4jIrv9vROOCkgygciil66-b_n64PzuMGVK9NxyPc4oXMJh4exg27BeOF1Mw/exec'
+        gasUrl: 'https://script.google.com/macros/s/AKfycbzEac1346p4jIrv9vROOCkgygciil66-b_n64PzuMGVK9NxyPc4oXMJh4exg27BeOF1Mw/exec',
+        stage: 'ENTREGA'
+    },
+    {
+        id: 'don-diego',
+        name: 'Don Diego',
+        location: 'Comuna de Santiago',
+        units: 150,
+        progress: 10,
+        image: '/projects/don-diego.png',
+        stage: 'CONSTRUCCION'
     }
 ];
 
@@ -249,11 +262,31 @@ const generateProjectData = (projectId: string) => {
         });
     }
 
+    if (projectId === 'don-diego') {
+        const names = ['Andrés Gómez', 'Beatriz Silva', 'Carlos Ruiz', 'Diana Torres', 'Eduardo Paz', 'Fabiola Méndez'];
+        return Array.from({ length: 10 }, (_, i) => {
+            const floor = 10 - i;
+            return {
+                floor,
+                units: Array.from({ length: 15 }, (_, j) => ({
+                    id: `${floor}${String(j + 1).padStart(2, '0')}`,
+                    number: `${floor}${String(j + 1).padStart(2, '0')}`,
+                    floor,
+                    status: ['E', 'LE', 'OBS', 'SV', 'DL'][Math.floor(Math.random() * 5)] as UnitStatus,
+                    type: 'DEPARTAMENTO' as const,
+                    storageNumber: `B-${(floor * 15) + j + 1}`,
+                    parkingNumber: `E-${(floor * 15) + j + 1}`,
+                    responsible: names[Math.floor(Math.random() * names.length)]
+                }))
+            };
+        });
+    }
+
     return [];
 };
 
 export default function App() {
-    const [view, setView] = useState<'HOME' | 'SELECT' | 'DASHBOARD'>('HOME');
+    const [view, setView] = useState<'HOME' | 'SELECT' | 'SELECT_CONSTRUCTION' | 'DASHBOARD'>('HOME');
     const [selectedProject, setSelectedProject] = useState<Project | null>(null);
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -523,7 +556,7 @@ export default function App() {
     const handleSelectProject = (project: Project) => {
         setSelectedProject(project);
         fetchProjectData(project.id);
-        setActiveTab('GRID');
+        setActiveTab(project.stage === 'CONSTRUCCION' ? 'TABLE' : 'GRID');
         setSearchTerm('');
         setFilterStatus('ALL');
         setView('DASHBOARD');
@@ -638,16 +671,20 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
                         {/* Tarjeta 1: Construcción */}
                         <div
-                            className="group relative bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-4 transition-all duration-500 cursor-not-allowed overflow-hidden opacity-80"
+                            onClick={() => setView('SELECT_CONSTRUCTION')}
+                            className="group relative bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-4 transition-all duration-500 cursor-pointer overflow-hidden p-[2px] bg-gradient-to-br from-transparent to-transparent hover:from-blue-500/20 hover:to-cyan-500/20"
                         >
-                            <div className="p-12 flex flex-col items-center text-center space-y-6">
+                            <div className="bg-white dark:bg-zinc-900 rounded-[2.4rem] p-12 flex flex-col items-center text-center space-y-6 h-full">
                                 <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
                                     <HardHat size={48} className="text-blue-600" />
                                 </div>
                                 <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-tight">
                                     Proyectos en proceso<br />de construcción
                                 </h2>
-                                <span className="px-4 py-2 bg-gray-100 dark:bg-zinc-800 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 group-hover:text-blue-600 transition-colors">Próximamente</span>
+                                <button className="w-full py-4 bg-gray-50 dark:bg-zinc-800 dark:text-gray-300 group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all duration-300 mt-4">
+                                    INGRESAR ETAPA
+                                    <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
+                                </button>
                             </div>
                         </div>
 
@@ -675,7 +712,11 @@ export default function App() {
         );
     }
 
-    if (view === 'SELECT') {
+    if (view === 'SELECT' || view === 'SELECT_CONSTRUCTION') {
+        const stageFilter = view === 'SELECT' ? 'ENTREGA' : 'CONSTRUCCION';
+        const title = view === 'SELECT' ? 'PROYECTOS EN ENTREGAS' : 'PROYECTOS EN CONSTRUCCIÓN';
+        const filteredProjects = PROJECTS.filter(p => p.stage === stageFilter);
+
         return (
             <div className="min-h-screen bg-[#F9FAFB] dark:bg-zinc-950 flex flex-col items-center justify-center p-6 font-sans overflow-hidden relative transition-colors duration-500">
                 {/* Background Decorative Elements */}
@@ -720,15 +761,15 @@ export default function App() {
                             <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Sistema de Gestión de Avance</span>
                         </div>
                         <h1 className="text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 text-balanced uppercase">
-                            PROYECTOS EN ENTREGAS
+                            {title}
                         </h1>
                         <p className="text-xl text-gray-500 dark:text-gray-400 font-medium">
                             Seleccione el proyecto para comenzar
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {PROJECTS.map((project, idx) => (
+                    <div className={`grid grid-cols-1 ${filteredProjects.length > 2 ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-8 max-w-5xl mx-auto`}>
+                        {filteredProjects.map((project, idx) => (
                             <div
                                 key={project.id}
                                 onClick={() => handleSelectProject(project)}
@@ -1243,6 +1284,7 @@ export default function App() {
                                                             <th className="px-8 py-2">Bodega</th>
                                                             <th className="px-8 py-2">Estac.</th>
                                                             <th className="px-8 py-2">Estado</th>
+                                                            <th className="px-8 py-2">Propietario</th>
                                                             <th className="px-8 py-2 text-right">Ver</th>
                                                         </tr>
                                                     </thead>
@@ -1280,6 +1322,9 @@ export default function App() {
                                                                                 </span>
                                                                             );
                                                                         })()}
+                                                                    </td>
+                                                                    <td className="hidden lg:table-cell px-8 py-5">
+                                                                        <span className="text-sm font-bold text-gray-600 truncate max-w-[150px] block">{unit.responsible || '-'}</span>
                                                                     </td>
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5 text-right rounded-r-xl lg:rounded-r-2xl">
                                                                         <ArrowRight size={16} className="ml-auto text-gray-400" />
