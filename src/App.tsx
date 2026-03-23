@@ -1210,7 +1210,7 @@ export default function App() {
                                                     <h3 className={`text-[9px] lg:text-[10px] font-black ${stat.textLight ? 'text-white/95' : 'text-gray-500'} uppercase tracking-wider leading-tight min-h-[2em]`}>{stat.label}</h3>
                                                     <div className="flex items-baseline gap-1 mt-1 lg:mt-2">
                                                         <p className={`text-xl lg:text-3xl font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{stat.value}</p>
-                                                        <span className={`text-[8px] lg:text-[10px] font-bold ${stat.textLight ? 'text-white/80' : 'text-gray-400'} uppercase tracking-widest shrink-0`}>u.</span>
+                                                        <span className={`text-[8px] lg:text-[10px] font-bold ${stat.textLight ? 'text-white/80' : 'text-gray-400'} uppercase tracking-widest shrink-0`}>unidades</span>
                                                     </div>
                                                 </div>
                                             </div>
