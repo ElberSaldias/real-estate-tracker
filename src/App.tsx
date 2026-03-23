@@ -447,9 +447,19 @@ export default function App() {
                     // Group by floor automatically
                     const groups: Record<string, any[]> = {};
                     data.forEach((u: any) => {
-                        const floorName = String(u.floor || u.FLOOR || u.ubicacion || u.piso || u.PISO || '0').trim();
-                        if (!groups[floorName]) groups[floorName] = [];
-                        groups[floorName].push(u);
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
+                        let floorName = String(u.floor || u.FLOOR || u.ubicacion || u.piso || u.PISO || '').trim().replace('PISO ', '');
+                        
+                        // Intelligent floor extraction from depto number if field is missing
+                        if (!floorName && deptoVal) {
+                            const dStr = String(deptoVal).replace(/[^\d]/g, '');
+                            if (dStr.length === 3) floorName = dStr.charAt(0);
+                            else if (dStr.length >= 4) floorName = dStr.slice(0, dStr.length - 2);
+                        }
+                        
+                        const finalFloor = floorName || '0';
+                        if (!groups[finalFloor]) groups[finalFloor] = [];
+                        groups[finalFloor].push(u);
                     });
 
                     normalizedData = Object.entries(groups).map(([floorName, units]) => ({
@@ -470,7 +480,11 @@ export default function App() {
                                 ...u
                             };
                         })
-                    })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                    })).sort((a, b) => {
+                        const valA = parseInt(String(a.floor)) || 0;
+                        const valB = parseInt(String(b.floor)) || 0;
+                        return valB - valA;
+                    });
                 } else {
                     // It's a list of floor objects [ { floor: '...', units: [...] }, ... ]
                     normalizedData = data.map((f: any) => ({
