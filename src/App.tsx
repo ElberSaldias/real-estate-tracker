@@ -322,6 +322,23 @@ export default function App() {
                { label: status, short: status, bg: 'bg-gray-400', color: 'text-white' };
     };
 
+    useEffect(() => {
+        const savedProject = localStorage.getItem('selectedProjectId');
+        const theme = localStorage.getItem('buildflow-theme');
+        if (theme === 'dark') setIsDarkMode(true);
+        
+        if (savedProject) {
+            const project = PROJECTS.find(p => p.id === savedProject);
+            if (project) {
+                setSelectedProject(project);
+                fetchProjectData(project.id);
+                // Allow the user to return to dashboard if they were there
+                const lastView = localStorage.getItem('lastView');
+                if (lastView === 'DASHBOARD') setView('DASHBOARD');
+            }
+        }
+    }, []);
+
     // Apply dark mode class to body/html
     useEffect(() => {
         console.log('🌓 Theme Preference Sync:', isDarkMode ? 'DARK' : 'LIGHT');
@@ -425,28 +442,28 @@ export default function App() {
 
             let normalizedData = [];
 
-            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined')) {
-                // If it's a flat list of units (like Don Diego), wrap it in a single floor for compatibility
+            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined' || typeof data[0].number !== 'undefined')) {
+                // Flat list of units
                 normalizedData = [{
                     floor: 'LISTADO',
                     units: data.map((u: any) => {
-                        const deptoVal = u.depto || u['depto.'] || u.DEPTO || u.number;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.id;
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
-                            floor: '0',
-                            status: String(u.revisión || u.revision || u.REVISIÓN || u.REVISION || 'S/R').trim().toUpperCase(),
-                            responsible: u.propietario || u.PROPIETARIO || 'SIN ASIGNAR',
-                            parkingNumber: [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            floor: u.ubicacion || '0',
+                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                            type: 'DEPARTAMENTO' as const, // Default type
+                            type: 'DEPARTAMENTO' as const,
                             ...u
                         };
                     })
                 }];
             } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-                // New logic for object structure { "PISO X": [...], ... }
+                // Object structure { "PISO X": [...], ... }
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
                     floor: floorName.replace(/[^\d]/g, '') || floorName,
                     units: (Array.isArray(units) ? units : []).map((u: any) => {
@@ -464,58 +481,33 @@ export default function App() {
                             ...u
                         };
                     })
-                })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                })).sort((a, b) => {
+                    const valA = parseInt(String(a.floor)) || 0;
+                    const valB = parseInt(String(b.floor)) || 0;
+                    return valB - valA;
+                });
             } else if (Array.isArray(data)) {
-                // Standard structure processing
+                // Array of floors [ { floor: '...', units: [...] }, ... ]
                 normalizedData = data.map((f: any) => ({
-                    ...f,
-                    units: f.units.map((u: any) => {
-                        // Refined helper: allow '0' as valid, but treat true empty/NA as missing
-                        const isNoData = (val: any) => {
-                            if (val === 0 || val === '0') return false; // Allowed!
-                            const s = String(val || '').toUpperCase().trim();
-                            return !val || s === 'N/A' || s === 'N/D' || s === '-' || s === 'N/D.' || s === 'S/A' || s === 'SIN ASIGNAR' || s === '';
-                        };
-
-                        // Search for all possible storage-related keys (e.g., Bodega 1, Bodega 2, B-101)
-                        const storageKeys = Object.keys(u).filter(key =>
-                            /bodega|storage|bode|^b[\s\d\-_]/i.test(key) && !isNoData(u[key])
-                        );
-                        const storage = storageKeys.length > 0
-                            ? [...new Set(storageKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                            : (u.storageNumber && !isNoData(u.storageNumber) ? u.storageNumber : (u.bodega && !isNoData(u.bodega) ? u.bodega : '-'));
-
-                        // Search for all possible parking-related keys (e.g., Estacionamiento, Estac, E-101, Estacion)
-                        const parkingKeys = Object.keys(u).filter(key =>
-                            /estacionamiento|parking|estac|est\.|estacion|^e[\s\d\-_]/i.test(key) && !isNoData(u[key])
-                        );
-                        const parking = parkingKeys.length > 0
-                            ? [...new Set(parkingKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                            : (u.parkingNumber && !isNoData(u.parkingNumber) ? u.parkingNumber : (u.estacionamiento && !isNoData(u.estacionamiento) ? u.estacionamiento : '-'));
-
-                        // Search for all possible responsible/owner keys
-                        const respKeys = Object.keys(u).filter(key =>
-                            /responsible|responsable|propietario|owner/i.test(key) && !isNoData(u[key]) && String(u[key]).toUpperCase() !== 'SIN ASIGNAR'
-                        );
-                        const resp = respKeys.length > 0
-                            ? [...new Set(respKeys.map(k => String(u[k]).trim()))].filter(val => !isNoData(val)).join(', ')
-                            : (u.responsible || u.responsable || u.propietario || u.PROPIETARIO || 'SIN ASIGNAR');
-
+                    floor: f.floor || '0',
+                    units: (f.units || []).map((u: any) => {
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad;
                         return {
-                            ...u,
-                            storageNumber: storage,
-                            parkingNumber: parking,
-                            responsible: resp,
-                            proceso_status: u.proceso_status || u.PROCESO_STATUS,
-                            tipo_proceso: u.tipo_proceso || u.TIPO_PROCESO,
-                            observaciones: u.observaciones || u.OBSERVACIONES || u.observacion || u.OBSERVACION,
-                            fecha_obs: u.fecha_obs || u.FECHA_OBS || u.fecha_observacion || u.FECHA_OBSERVACION || u["fecha de observaciones"] || u["FECHA DE OBSERVACIONES"],
-                            link_acta: u.link_acta || u.LINK_ACTA || u.acta_link || u.ACTA_LINK || u["Link de dropbox"] || u["LINK DE DROPBOX"]
+                            id: String(deptoVal),
+                            number: String(deptoVal),
+                            floor: u.ubicacion || f.floor || '0',
+                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
+                            type: 'DEPARTAMENTO' as const,
+                            ...u
                         };
                     })
-                }));
+                })).sort((a, b) => String(b.floor).localeCompare(String(a.floor)));
             } else {
-                throw new Error('La estructura de datos recibida no es válida');
+                throw new Error('Estructura de datos no reconocida (se esperaba Objeto Agrupado o Arreglo de Pisos)');
             }
 
             console.log(`Exito: ${normalizedData.length} pisos cargados desde Google Sheets`);
@@ -643,6 +635,8 @@ export default function App() {
         setSearchTerm('');
         setFilterStatus('ALL');
         setView('DASHBOARD');
+        localStorage.setItem('selectedProjectId', project.id);
+        localStorage.setItem('lastView', 'DASHBOARD');
     };
 
     const handleSync = () => {
