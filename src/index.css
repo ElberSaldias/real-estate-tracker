@@ -127,10 +127,19 @@
   @apply transition-all duration-200 cursor-pointer hover:shadow-md hover:-translate-y-0.5;
 }
 
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
 @media (hover: hover) {
   .unit-hover-effect:hover {
-    transform: scale(1.6);
+    transform: scale(1.15);
     z-index: 50;
-    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    box-shadow: 0 10px 20px -5px rgb(0 0 0 / 0.15);
   }
 }

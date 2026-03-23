@@ -32,7 +32,9 @@ import {
     Key,
     PhoneCall,
     Moon,
-    Sun
+    Sun,
+    HardHat,
+    X
 } from 'lucide-react'
 
 
@@ -50,11 +52,16 @@ interface Unit {
     responsible?: string;
     storageNumber?: string;
     parkingNumber?: string;
+    proceso_status?: string;
+    tipo_proceso?: string;
+    observaciones?: any;
+    fecha_obs?: string;
     // Spanish aliases for incoming data
     bodega?: string;
     estacionamiento?: string;
     responsable?: string;
     propietario?: string;
+    link_acta?: string;
 }
 
 interface Project {
@@ -69,13 +76,13 @@ interface Project {
 
 const PROJECTS: Project[] = [
     {
-        id: 'don-claudio',
-        name: 'Don Claudio',
+        id: 'carvajal-330',
+        name: 'Carvajal 330',
         location: 'Comuna de la Cisterna',
-        units: 194,
-        progress: 45,
-        image: '/projects/don-claudio-v2.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbzEac1346p4jIrv9vROOCkgygciil66-b_n64PzuMGVK9NxyPc4oXMJh4exg27BeOF1Mw/exec'
+        units: 246,
+        progress: 15,
+        image: '/projects/carvajal-330-v2.png',
+        gasUrl: 'https://script.google.com/macros/s/AKfycbyMiUHLZKGgQ7VDq22nXna9mCOeap2c8TDpwXgXVWDPcYzXlGLWTGKS2xfMoEFbm6JeZw/exec'
     },
     {
         id: 'san-ignacio',
@@ -87,15 +94,47 @@ const PROJECTS: Project[] = [
         gasUrl: 'https://script.google.com/macros/s/AKfycbz0c_bGXRJdb3OUPmp1W0eGyuT8WiFWBALbYMJfR4lEq7wH9yapIIRts0l0ytlFamuAsw/exec'
     },
     {
-        id: 'carvajal-330',
-        name: 'Carvajal 330',
+        id: 'don-claudio',
+        name: 'Don Claudio',
         location: 'Comuna de la Cisterna',
-        units: 246,
-        progress: 15,
-        image: '/projects/carvajal-330-v2.png',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbyMiUHLZKGgQ7VDq22nXna9mCOeap2c8TDpwXgXVWDPcYzXlGLWTGKS2xfMoEFbm6JeZw/exec'
+        units: 194,
+        progress: 45,
+        image: '/projects/don-claudio-v2.png',
+        gasUrl: 'https://script.google.com/macros/s/AKfycbzEac1346p4jIrv9vROOCkgygciil66-b_n64PzuMGVK9NxyPc4oXMJh4exg27BeOF1Mw/exec'
     }
 ];
+
+const calculateBusinessDays = (startDate: Date, endDate: Date) => {
+    let count = 0;
+    const curDate = new Date(startDate.getTime());
+    curDate.setHours(0, 0, 0, 0);
+    const finalDate = new Date(endDate.getTime());
+    finalDate.setHours(0, 0, 0, 0);
+
+    const isReverse = finalDate < curDate;
+    const start = isReverse ? finalDate : curDate;
+    const end = isReverse ? curDate : finalDate;
+
+    // Fixed Chilean holidays
+    const holidays = [
+        '01-01', '05-01', '05-21', '06-29', '07-16', 
+        '08-15', '09-18', '09-19', '10-12', '10-31', 
+        '11-01', '12-08', '12-25'
+    ];
+
+    const tempDate = new Date(start.getTime());
+    while (tempDate <= end) {
+        const dayOfWeek = tempDate.getDay();
+        const mmdd = `${String(tempDate.getMonth() + 1).padStart(2, '0')}-${String(tempDate.getDate()).padStart(2, '0')}`;
+        
+        // 0 = Sunday, 6 = Saturday
+        if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays.includes(mmdd)) {
+            count++;
+        }
+        tempDate.setDate(tempDate.getDate() + 1);
+    }
+    return count;
+};
 
 const STATUS_CONFIG: Record<string, { label: string, short: string, color: string, bg: string }> = {
     'E': { label: 'ENTREGADO', short: 'E', color: 'text-green-600', bg: 'bg-green-500' },
@@ -214,26 +253,21 @@ const generateProjectData = (projectId: string) => {
 };
 
 export default function App() {
-    const [view, setView] = useState<'SELECT' | 'DASHBOARD'>('SELECT');
+    const [view, setView] = useState<'HOME' | 'SELECT' | 'DASHBOARD'>('HOME');
     const [selectedProject, setSelectedProject] = useState<Project | null>(null);
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<UnitStatus | 'ALL'>('ALL');
-    const [activeTab, setActiveTab] = useState<'GRID' | 'TABLE'>('GRID');
+    const [activeTab, setActiveTab] = useState<'GRID' | 'TABLE' | 'OBSERVATIONS'>('GRID');
     const [activeSidebar, setActiveSidebar] = useState('dashboard');
     const [isExporting, setIsExporting] = useState(false);
+    const [viewerPdfUrl, setViewerPdfUrl] = useState<string | null>(null);
 
     // Load and manage data in state for persistence
     const [floorsData, setFloorsData] = useState<{ floor: number, units: Unit[] }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [projectsStats, setProjectsStats] = useState<Record<string, Record<string, number>>>({});
-    const [isDarkMode, setIsDarkMode] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('buildflow-theme');
-            return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        }
-        return false;
-    });
+    const [isDarkMode, setIsDarkMode] = useState(false);
     const dashboardRef = useRef<HTMLDivElement>(null);
 
     // Apply dark mode class to body/html
@@ -359,7 +393,12 @@ export default function App() {
                         ...u,
                         storageNumber: storage,
                         parkingNumber: parking,
-                        responsible: resp
+                        responsible: resp,
+                        proceso_status: u.proceso_status || u.PROCESO_STATUS,
+                        tipo_proceso: u.tipo_proceso || u.TIPO_PROCESO,
+                        observaciones: u.observaciones || u.OBSERVACIONES || u.observacion || u.OBSERVACION,
+                        fecha_obs: u.fecha_obs || u.FECHA_OBS || u.fecha_observacion || u.FECHA_OBSERVACION || u["fecha de observaciones"] || u["FECHA DE OBSERVACIONES"],
+                        link_acta: u.link_acta || u.LINK_ACTA || u.acta_link || u.ACTA_LINK || u["Link de dropbox"] || u["LINK DE DROPBOX"]
                     };
                 })
             }));
@@ -445,8 +484,8 @@ export default function App() {
     const filteredFloors = useMemo(() => floorsData.map(f => ({
         ...f,
         units: f.units.filter(u => {
-            const matchesStatus = filterStatus === 'ALL' || u.status === filterStatus;
             const matchesSearch = u.number.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesStatus = filterStatus === 'ALL' || u.status === filterStatus;
             return matchesStatus && matchesSearch;
         })
     })).filter(f => f.units.length > 0 || searchTerm === ''), [floorsData, filterStatus, searchTerm]);
@@ -484,6 +523,9 @@ export default function App() {
     const handleSelectProject = (project: Project) => {
         setSelectedProject(project);
         fetchProjectData(project.id);
+        setActiveTab('GRID');
+        setSearchTerm('');
+        setFilterStatus('ALL');
         setView('DASHBOARD');
     };
 
@@ -531,26 +573,107 @@ export default function App() {
 
         // Use soldTotal as denominator for status percentages, but total for sold percentage
         return {
-            visited: { count: visited, percentage: Math.round((visited / Math.max(soldTotal, 1)) * 100) },
-            entregados: { count: counts.E, percentage: Math.round((counts.E / Math.max(soldTotal, 1)) * 100) },
-            listos: { count: counts.LE, percentage: Math.round((counts.LE / Math.max(soldTotal, 1)) * 100) },
-            observaciones: { count: counts.OBS, percentage: Math.round((counts.OBS / Math.max(soldTotal, 1)) * 100) },
-            sinVisita: { count: counts.SV, percentage: Math.round((counts.SV / Math.max(soldTotal, 1)) * 100) },
-            vendidos: { count: soldTotal, percentage: Math.round((soldTotal / total) * 100) },
-            sinVender: { count: counts.DL, percentage: Math.round((counts.DL / total) * 100) },
+            visited: { count: visited, percentage: Number(((visited / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            entregados: { count: counts.E, percentage: Number(((counts.E / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            listos: { count: counts.LE, percentage: Number(((counts.LE / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            observaciones: { count: counts.OBS, percentage: Number(((counts.OBS / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            sinVisita: { count: counts.SV, percentage: Number(((counts.SV / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
+            vendidos: { count: soldTotal, percentage: Number(((soldTotal / total) * 100).toFixed(1)) },
+            sinVender: { count: counts.DL, percentage: Number(((counts.DL / total) * 100).toFixed(1)) },
             total: { count: total, percentage: 100 }
         };
     }, [floorsData, selectedProject]);
 
     const stats = [
-        { label: 'DEPARTAMENTOS VENDIDOS', value: statCounts.vendidos.count.toString(), percentage: `${statCounts.vendidos.percentage}%`, icon: Key, color: 'text-indigo-700', bg: 'bg-indigo-100/60', border: 'border-indigo-200/50' },
-        { label: 'DEPTOS. VISITADOS', value: statCounts.visited.count.toString(), percentage: `${statCounts.visited.percentage}%`, icon: Eye, color: 'text-blue-700', bg: 'bg-blue-100/60', border: 'border-blue-200/50' },
-        { label: 'ENTREGADOS', value: statCounts.entregados.count.toString(), percentage: `${statCounts.entregados.percentage}%`, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-100/60', border: 'border-green-200/50' },
-        { label: 'LISTOS PARA ENTREGA', value: statCounts.listos.count.toString(), percentage: `${statCounts.listos.percentage}%`, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-100/60', border: 'border-blue-200/50' },
-        { label: 'CON OBSERVACIONES', value: statCounts.observaciones.count.toString(), percentage: `${statCounts.observaciones.percentage}%`, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-100/60', border: 'border-amber-200/50' },
-        { label: 'SIN VISITA (VENDIDOS)', value: statCounts.sinVisita.count.toString(), percentage: `${statCounts.sinVisita.percentage}%`, icon: UserX, color: 'text-slate-700', bg: 'bg-slate-100/60', border: 'border-slate-300/50' },
-        { label: 'TOTAL UNIDADES', value: statCounts.total.count.toString(), percentage: '100%', icon: Layers, color: 'text-gray-900', bg: 'bg-white', border: 'border-gray-200 shadow-sm' },
+        { label: 'TOTAL UNIDADES', value: statCounts.total.count.toString(), percentage: '100%', icon: Layers, color: 'text-gray-900', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
+        { label: 'DEPARTAMENTOS VENDIDOS', value: statCounts.vendidos.count.toString(), percentage: `${statCounts.vendidos.percentage}%`, icon: Key, color: 'text-indigo-700', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
+        { label: 'DEPTOS. VISITADOS', value: statCounts.visited.count.toString(), percentage: `${statCounts.visited.percentage}%`, icon: Eye, color: 'text-blue-700', bg: 'bg-white hover:bg-white dark:bg-zinc-900/50 dark:hover:bg-zinc-900', border: 'border-2 border-gray-200', textLight: false },
+        { label: 'ENTREGADOS', value: statCounts.entregados.count.toString(), percentage: `${statCounts.entregados.percentage}%`, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-500 hover:bg-green-600', border: 'border-transparent', textLight: true },
+        { label: 'LISTOS PARA ENTREGA', value: statCounts.listos.count.toString(), percentage: `${statCounts.listos.percentage}%`, icon: Clock, color: 'text-blue-700', bg: 'bg-blue-500 hover:bg-blue-600', border: 'border-transparent', textLight: true },
+        { label: 'CON OBSERVACIONES', value: statCounts.observaciones.count.toString(), percentage: `${statCounts.observaciones.percentage}%`, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-500 hover:bg-amber-600', border: 'border-transparent', textLight: true, clickable: true, onClick: () => setActiveTab('OBSERVATIONS') },
+        { label: 'SIN VISITA (VENDIDOS)', value: statCounts.sinVisita.count.toString(), percentage: `${statCounts.sinVisita.percentage}%`, icon: UserX, color: 'text-gray-700', bg: 'bg-gray-400 hover:bg-gray-500', border: 'border-transparent', textLight: true },
     ];
+
+    if (view === 'HOME') {
+        return (
+            <div className="min-h-screen bg-[#F9FAFB] dark:bg-zinc-950 flex flex-col items-center justify-center p-6 font-sans overflow-hidden relative transition-colors duration-500">
+                {/* Background Decorative Elements */}
+                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 dark:bg-blue-500/10 blur-[120px] rounded-full"></div>
+                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/5 dark:bg-purple-500/10 blur-[120px] rounded-full"></div>
+
+                <div className="max-w-6xl w-full z-10 relative">
+                    {/* Floating Theme Toggle */}
+                    <div className="absolute top-0 right-0 z-50">
+                        <button
+                            onClick={() => setIsDarkMode(!isDarkMode)}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all group"
+                        >
+                            {isDarkMode ? (
+                                <>
+                                    <Sun size={18} className="text-amber-500 group-hover:rotate-90 transition-transform" />
+                                    <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Modo Claro</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Moon size={18} className="text-indigo-600 group-hover:-rotate-12 transition-transform" />
+                                    <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Modo Oscuro</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    <div className="text-center mb-16 space-y-4 animate-in fade-in slide-in-from-top-10 duration-700">
+                        <div className="inline-flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-sm mb-4 theme-transition">
+                            <Construction className="text-blue-600 w-5 h-5" />
+                            <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Sistema de Gestión de Avance</span>
+                        </div>
+                        <h1 className="text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 text-balanced uppercase">
+                            BIENVENIDO
+                        </h1>
+                        <p className="text-xl text-gray-500 dark:text-gray-400 font-medium">
+                            Seleccione la etapa del proyecto para comenzar
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                        {/* Tarjeta 1: Construcción */}
+                        <div
+                            className="group relative bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-blue-500/10 hover:-translate-y-4 transition-all duration-500 cursor-not-allowed overflow-hidden opacity-80"
+                        >
+                            <div className="p-12 flex flex-col items-center text-center space-y-6">
+                                <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                                    <HardHat size={48} className="text-blue-600" />
+                                </div>
+                                <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-tight">
+                                    Proyectos en proceso<br />de construcción
+                                </h2>
+                                <span className="px-4 py-2 bg-gray-100 dark:bg-zinc-800 rounded-full text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 group-hover:text-blue-600 transition-colors">Próximamente</span>
+                            </div>
+                        </div>
+
+                        {/* Tarjeta 2: Entregas */}
+                        <div
+                            onClick={() => setView('SELECT')}
+                            className="group relative bg-white dark:bg-zinc-900 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-xl shadow-gray-200/50 dark:shadow-none hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-4 transition-all duration-500 cursor-pointer overflow-hidden p-[2px] bg-gradient-to-br from-transparent to-transparent hover:from-indigo-500/20 hover:to-purple-500/20"
+                        >
+                            <div className="bg-white dark:bg-zinc-900 rounded-[2.4rem] p-12 flex flex-col items-center text-center space-y-6 h-full">
+                                <div className="w-24 h-24 bg-indigo-50 dark:bg-indigo-900/20 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-500">
+                                    <Key size={48} className="text-indigo-600" />
+                                </div>
+                                <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase tracking-tighter leading-tight">
+                                    Proyectos en proceso<br />de entregas
+                                </h2>
+                                <button className="w-full py-4 bg-gray-50 dark:bg-zinc-800 dark:text-gray-300 group-hover:bg-black group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black rounded-2xl text-sm font-black flex items-center justify-center gap-3 transition-all duration-300 mt-4">
+                                    INGRESAR ETAPA
+                                    <ArrowRight size={18} className="group-hover:translate-x-2 transition-transform" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (view === 'SELECT') {
         return (
@@ -580,13 +703,24 @@ export default function App() {
                         </button>
                     </div>
 
+                    {/* Back to HOME toggle */}
+                    <div className="absolute top-0 left-0 z-50">
+                        <button
+                            onClick={() => setView('HOME')}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all group"
+                        >
+                            <ArrowRight size={18} className="rotate-180 text-gray-400 group-hover:-translate-x-1 transition-transform" />
+                            <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Volver</span>
+                        </button>
+                    </div>
+
                     <div className="text-center mb-16 space-y-4 animate-in fade-in slide-in-from-top-10 duration-700">
-                        <div className="inline-flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-sm mb-4">
+                        <div className="inline-flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-sm mb-4 theme-transition">
                             <Construction className="text-blue-600 w-5 h-5" />
                             <span className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Sistema de Gestión de Avance</span>
                         </div>
-                        <h1 className="text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 text-balanced">
-                            BIENVENIDO
+                        <h1 className="text-5xl font-black text-gray-900 dark:text-white tracking-tight mb-4 text-balanced uppercase">
+                            PROYECTOS EN ENTREGAS
                         </h1>
                         <p className="text-xl text-gray-500 dark:text-gray-400 font-medium">
                             Seleccione el proyecto para comenzar
@@ -649,7 +783,7 @@ export default function App() {
                         <div className="w-10 h-10 bg-black dark:bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/10 shrink-0">
                             <Construction className="text-white dark:text-black w-6 h-6" />
                         </div>
-                        <span className="font-bold text-2xl tracking-tighter opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap w-0 group-hover:w-auto overflow-hidden text-clip dark:text-white">BuildFlow</span>
+                        <span className="font-bold text-base tracking-tighter opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap w-0 group-hover:w-auto overflow-hidden text-clip dark:text-white">BuildFlow</span>
                     </div>
 
                     <div className="space-y-1.5 focus-within:ring-0">
@@ -702,10 +836,9 @@ export default function App() {
                         <span className="opacity-0 group-hover:opacity-100 transition-all duration-300 whitespace-nowrap w-0 group-hover:w-auto overflow-hidden">Cambiar Proyecto</span>
                     </button>
                     <div className="flex items-center justify-center group-hover:justify-start gap-0 group-hover:gap-3 px-2 py-2.5 bg-gray-50 dark:bg-zinc-800 rounded-2xl border border-gray-100 dark:border-zinc-700 relative overflow-hidden transition-all duration-300">
-                        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-blue-200 shrink-0">EA</div>
+                        <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-md shadow-blue-200 shrink-0">A</div>
                         <div className="flex-1 overflow-hidden opacity-0 group-hover:opacity-100 transition-all duration-300 w-0 group-hover:w-auto">
-                            <p className="text-xs font-bold text-gray-900 dark:text-white truncate">Elber Aldias</p>
-                            <p className="text-[10px] text-gray-500 dark:text-zinc-400 font-medium truncate uppercase">Administrador</p>
+                            <p className="text-xs font-bold text-gray-900 dark:text-white truncate">Administrador</p>
                         </div>
                     </div>
                 </div>
@@ -788,13 +921,6 @@ export default function App() {
                             >
                                 {isDarkMode ? <Sun size={20} className="text-amber-500 lg:size-5.5" /> : <Moon size={20} className="text-indigo-600 lg:size-5.5" />}
                             </button>
-                            <div className="lg:p-2.5 p-2 text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl cursor-pointer relative transition-all active:scale-95">
-                                <Bell size={20} className="lg:size-5.5" />
-                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-zinc-900"></span>
-                            </div>
-                            <div className="lg:p-2.5 p-2 text-gray-500 dark:text-zinc-400 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl cursor-pointer transition-all active:scale-95">
-                                <User size={20} className="lg:size-5.5" />
-                            </div>
                         </div>
                     </div>
                 </header>
@@ -899,32 +1025,39 @@ export default function App() {
 
                                 {/* KPI Cards */}
                                 <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 lg:gap-4">
-                                    {stats.map((stat) => (
-                                        <div key={stat.label} className={`${stat.bg} dark:bg-zinc-900/50 p-4 lg:p-5 rounded-2xl lg:rounded-3xl border border-transparent dark:border-zinc-800 hover:shadow-xl hover:bg-white dark:hover:bg-zinc-900 transition-all duration-500 group relative overflow-hidden flex flex-col justify-between h-full`}>
+                                    {stats.map((stat, index) => {
+                                        const isMainCard = index < 3;
+                                        const isClickable = (stat as any).clickable;
+                                        return (
+                                        <div 
+                                            key={stat.label} 
+                                            onClick={() => isClickable && (stat as any).onClick()}
+                                            className={`${stat.bg} border ${stat.border} ${isMainCard ? 'p-6 lg:p-7' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl dark:border-zinc-800 shadow-sm transition-all duration-500 group relative overflow-hidden flex flex-col justify-between h-full ${isClickable ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]' : ''}`}
+                                        >
                                             <div className="flex items-center justify-between mb-2 lg:mb-4">
-                                                <div className={`p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-white/80 dark:bg-zinc-800 ${stat.color} shadow-sm`}>
+                                                <div className={`p-2 lg:p-2.5 rounded-lg lg:rounded-xl bg-white/90 dark:bg-zinc-800 ${stat.color} shadow-sm`}>
                                                     <stat.icon size={18} className="lg:size-5.5" />
                                                 </div>
                                                 <div className="flex flex-col items-end">
-                                                    <span className={`text-[8px] lg:text-[9px] font-black ${stat.color} bg-white/90 dark:bg-zinc-800 px-1.5 lg:px-2 py-0.5 rounded-full shadow-sm`}>{stat.percentage}</span>
-                                                    <span className="text-[7px] lg:text-[8px] font-bold text-gray-400 mt-0.5 uppercase tracking-tighter text-right">
+                                                    <span className={`text-xs lg:text-[14px] font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} ${isExporting ? 'px-3 py-1 inline-block leading-none' : 'px-2 lg:px-2.5 py-0.5'}`}>{stat.percentage}</span>
+                                                    <span className={`text-[7px] lg:text-[8px] font-bold ${stat.textLight ? 'text-white/90' : 'text-gray-400'} mt-1 uppercase tracking-tighter text-right`}>
                                                         {stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas'}
                                                     </span>
                                                 </div>
                                             </div>
                                             <div>
-                                                <h3 className="text-[9px] lg:text-[10px] font-black text-gray-500 uppercase tracking-wider leading-tight min-h-[2em]">{stat.label}</h3>
+                                                <h3 className={`text-[9px] lg:text-[10px] font-black ${stat.textLight ? 'text-white/95' : 'text-gray-500'} uppercase tracking-wider leading-tight min-h-[2em]`}>{stat.label}</h3>
                                                 <div className="flex items-baseline gap-1 mt-1 lg:mt-2">
-                                                    <p className="text-xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tighter">{stat.value}</p>
-                                                    <span className="text-[8px] lg:text-[10px] font-bold text-gray-400 uppercase tracking-widest shrink-0">u.</span>
+                                                    <p className={`text-xl lg:text-3xl font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} tracking-tighter`}>{stat.value}</p>
+                                                    <span className={`text-[8px] lg:text-[10px] font-bold ${stat.textLight ? 'text-white/80' : 'text-gray-400'} uppercase tracking-widest shrink-0`}>u.</span>
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
 
                                 {/* Matrix Container */}
-                                <div className="bg-white dark:bg-zinc-900 rounded-3xl lg:rounded-[3rem] border border-gray-200 dark:border-zinc-800 shadow-2xl dark:shadow-none overflow-hidden min-h-[500px] lg:min-h-[700px] flex flex-col transition-all">
+                                <div id="matrix-container" className="bg-white dark:bg-zinc-900 rounded-3xl lg:rounded-[3rem] border border-gray-200 dark:border-zinc-800 shadow-2xl dark:shadow-none overflow-hidden min-h-[500px] lg:min-h-[700px] flex flex-col transition-all">
                                     <div className="p-4 lg:p-8 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/30 dark:bg-zinc-800/30 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                         <div>
                                             <h2 className="text-lg lg:text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">Matriz de Unidades</h2>
@@ -953,7 +1086,7 @@ export default function App() {
                                                 </button>
                                                 <button
                                                     onClick={() => setActiveTab('TABLE')}
-                                                    className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'TABLE' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400'}`}
+                                                    className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'TABLE' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white cursor-pointer'}`}
                                                 >
                                                     DETALLE
                                                 </button>
@@ -962,7 +1095,84 @@ export default function App() {
                                     </div>
 
                                     <div className="p-4 lg:p-10 flex-1 overflow-x-auto relative">
-                                        {activeTab === 'GRID' ? (
+                                        {activeTab === 'OBSERVATIONS' ? (
+                                            <div className="space-y-6 max-w-5xl mx-auto">
+                                                <div className="flex items-center justify-between mb-8">
+                                                    <h3 className="text-xl lg:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tighter">Unidades con Observaciones</h3>
+                                                    <button 
+                                                        onClick={() => setActiveTab('GRID')}
+                                                        className="px-4 py-2 bg-gray-100 dark:bg-zinc-800 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-all"
+                                                    >
+                                                        Volver a la Matriz
+                                                    </button>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 pb-12">
+                                                    {floorsData.flatMap(f => f.units)
+                                                        .filter(u => STATUS_CONFIG[u.status.trim().toUpperCase()]?.short === 'OBS')
+                                                        .sort((a, b) => {
+                                                            const dateA = a.fecha_obs ? new Date(a.fecha_obs).getTime() : 0;
+                                                            const dateB = b.fecha_obs ? new Date(b.fecha_obs).getTime() : 0;
+                                                            return dateA - dateB; // Oldest first
+                                                        })
+                                                        .map(u => {
+                                                            const diffDays = u.fecha_obs ? (() => {
+                                                                try {
+                                                                    const obsDate = new Date(u.fecha_obs);
+                                                                    if (isNaN(obsDate.getTime())) return null;
+                                                                    const today = new Date();
+                                                                    return calculateBusinessDays(obsDate, today);
+                                                                } catch (e) { return null; }
+                                                            })() : null;
+
+                                                            const isOverdue = diffDays !== null && diffDays > 15;
+
+                                                            return (
+                                                                <div 
+                                                                    key={u.id}
+                                                                    onClick={() => setSelectedUnit(u)}
+                                                                    className="bg-white dark:bg-zinc-900 p-6 rounded-[2.5rem] border border-gray-100 dark:border-zinc-800 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer group"
+                                                                >
+                                                                    <div className="flex justify-between items-start mb-4">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="text-xl lg:text-2xl font-black text-gray-900 dark:text-white tracking-tighterest">
+                                                                                Departamento {u.number.replace(/^(U\.|EE\. UU\.|DEPTO\.|UNIDAD)\s*/i, '')}
+                                                                            </span>
+                                                                            <div className="flex gap-3 mt-1.5">
+                                                                                <div className="px-2 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-md">
+                                                                                    <span className="text-[8px] lg:text-[9px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-widest">Bodega: {u.storageNumber || '-'}</span>
+                                                                                </div>
+                                                                                <div className="px-2 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-md">
+                                                                                    <span className="text-[8px] lg:text-[9px] font-black text-gray-500 dark:text-zinc-400 uppercase tracking-widest">Estac.: {u.parkingNumber || '-'}</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className={`p-2.5 ${isOverdue ? 'bg-red-500 animate-bounce' : 'bg-amber-500'} rounded-xl text-white transition-colors duration-500 shadow-lg`}>
+                                                                            <AlertCircle size={20} />
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="space-y-4">
+                                                                        <div>
+                                                                            <p className="text-[10px] font-black text-gray-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-2">
+                                                                                <User size={12} />
+                                                                                Propietario / Responsable
+                                                                            </p>
+                                                                            <p className="text-sm font-black text-gray-800 dark:text-gray-200 uppercase tracking-tight line-clamp-1">
+                                                                                {u.responsible || 'SIN ASIGNAR'}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div className="pt-2 border-t border-gray-50 dark:border-zinc-800 text-center">
+                                                                            <p className={`text-[11px] font-extrabold ${isOverdue ? 'text-red-600 dark:text-red-500' : 'text-amber-600 dark:text-amber-500'} uppercase tracking-widest flex items-center justify-center gap-2 transition-colors`}>
+                                                                                <Clock size={14} className={isOverdue ? 'animate-spin-slow' : ''} />
+                                                                                {diffDays !== null ? `HAN PASADO ${diffDays} DIAS HABILES DESDE EL ENVIO DE LAS OBSERVACIONES` : 'Fecha no registrada'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                </div>
+                                            </div>
+                                        ) : activeTab === 'GRID' ? (
                                             <div className={`flex flex-col ${selectedProject?.id === 'san-ignacio' ? 'gap-1' : 'gap-4'} w-fit mx-auto lg:pb-0 pb-10`}>
                                                 {/* Typology Headers Row */}
                                                 <div className={`flex ${selectedProject?.id === 'don-claudio' ? 'gap-1 lg:gap-1.5' : 'gap-2 lg:gap-4'}`}>
@@ -1114,6 +1324,58 @@ export default function App() {
                                         <Home size={14} className="lg:size-4" />
                                         {selectedProject?.name}
                                     </p>
+                                    {(STATUS_CONFIG[selectedUnit.status.trim().toUpperCase()]?.short === 'OBS' || selectedUnit.link_acta) && (
+                                        <div className="flex flex-col items-center justify-center gap-3 mt-6 bg-amber-50/50 dark:bg-amber-900/10 p-6 rounded-[2rem] border border-amber-100/50 dark:border-amber-900/20">
+                                            {selectedUnit.fecha_obs && (
+                                                <>
+                                                    <p className="inline-flex items-center gap-3 px-6 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-sm lg:text-base font-black text-amber-700 dark:text-amber-400 uppercase tracking-tighter shadow-sm">
+                                                        <Clock size={20} className="text-amber-500" />
+                                                        Obs. registrada el: {(() => {
+                                                            try {
+                                                                const date = new Date(selectedUnit.fecha_obs!);
+                                                                if (isNaN(date.getTime())) return selectedUnit.fecha_obs;
+                                                                const day = String(date.getDate()).padStart(2, '0');
+                                                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                                const year = date.getFullYear();
+                                                                return `${day}/${month}/${year}`;
+                                                            } catch (e) {
+                                                                return selectedUnit.fecha_obs;
+                                                            }
+                                                        })()}
+                                                    </p>
+                                                    <p className={`text-xs lg:text-sm font-black uppercase tracking-widest animate-pulse ${(() => {
+                                                        try {
+                                                            const obsDate = new Date(selectedUnit.fecha_obs!);
+                                                            if (isNaN(obsDate.getTime())) return 'text-amber-600 dark:text-amber-500';
+                                                            const diffDays = calculateBusinessDays(obsDate, new Date());
+                                                            return diffDays > 15 ? 'text-red-600 dark:text-red-500' : 'text-amber-600 dark:text-amber-500';
+                                                        } catch (e) { return 'text-amber-600 dark:text-amber-500'; }
+                                                    })()}`}>
+                                                        {(() => {
+                                                            try {
+                                                                const obsDate = new Date(selectedUnit.fecha_obs!);
+                                                                if (isNaN(obsDate.getTime())) return '';
+                                                                const today = new Date();
+                                                                const diffDays = calculateBusinessDays(obsDate, today);
+                                                                return `HAN PASADO ${diffDays} DIAS HABILES DESDE EL ENVIO DE LAS OBSERVACIONES`;
+                                                            } catch (e) {
+                                                                return '';
+                                                            }
+                                                        })()}
+                                                    </p>
+                                                </>
+                                            )}
+                                            {selectedUnit.link_acta && (
+                                                <button 
+                                                    onClick={() => setViewerPdfUrl(selectedUnit.link_acta!)}
+                                                    className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-zinc-800 border-2 border-red-500 text-red-600 dark:text-red-400 rounded-2xl text-[10px] lg:text-xs font-black uppercase tracking-widest transition-all shadow-md hover:bg-red-500 hover:text-white dark:hover:bg-red-600 active:scale-95 group"
+                                                >
+                                                    <FileText size={16} className="group-hover:rotate-6 transition-transform" />
+                                                    Ver Acta de Observaciones
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => setSelectedUnit(null)}
@@ -1188,6 +1450,65 @@ export default function App() {
                     </div>
                 )
             }
+
+            {/* PDF Viewer Digital Modal */}
+            {viewerPdfUrl && (
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 lg:p-10 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setViewerPdfUrl(null)}></div>
+                    <div className="relative bg-white dark:bg-zinc-900 w-full h-full lg:w-[90%] lg:h-[90%] rounded-3xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-500">
+                        {/* Header */}
+                        <div className="p-4 lg:p-6 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 z-10 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-xl">
+                                    <FileText className="text-red-600 dark:text-red-400" size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg lg:text-xl font-black text-gray-900 dark:text-white tracking-tight leading-none">Visor de Acta Digital</h3>
+                                    <p className="text-[10px] lg:text-xs text-gray-400 dark:text-zinc-500 mt-1 uppercase font-bold tracking-widest">Unidad: {selectedUnit?.number} • {selectedProject?.name}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <a 
+                                    href={viewerPdfUrl.replace('?raw=1', '')} 
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="hidden lg:flex items-center gap-2 px-4 py-2 text-xs font-black text-gray-500 hover:text-black dark:hover:text-white transition-colors uppercase tracking-widest"
+                                >
+                                    <Download size={16} />
+                                    Descargar Original
+                                </a>
+                                <button 
+                                    onClick={() => setViewerPdfUrl(null)}
+                                    className="w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center rounded-xl lg:rounded-2xl bg-gray-50 dark:bg-zinc-800 text-gray-400 hover:bg-red-500 hover:text-white transition-all duration-300 active:scale-90"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 bg-gray-100 dark:bg-zinc-950 relative overflow-hidden">
+                            <iframe 
+                                src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewerPdfUrl)}&embedded=true`} 
+                                className="w-full h-full border-none"
+                                title="Visor PDF"
+                            />
+                            
+                            {/* Fallback / Footer Helper */}
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
+                                <a 
+                                    href={viewerPdfUrl} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="px-6 py-2 bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-full text-[10px] font-black text-gray-400 hover:text-black dark:hover:text-white uppercase tracking-widest transition-all border border-gray-200/20 shadow-xl"
+                                >
+                                    ¿Problemas al visualizar? Haz clic aquí para abrir directo
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
