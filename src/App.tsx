@@ -450,7 +450,7 @@ export default function App() {
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
                     floor: floorName.replace(/[^\d]/g, '') || floorName,
                     units: (Array.isArray(units) ? units : []).map((u: any) => {
-                        const deptoVal = u.depto || u['depto.'] || u.number || u.unidad;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.unidad || u.id;
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
@@ -1367,6 +1367,7 @@ export default function App() {
                                                                     <div
                                                                         key={unit.id}
                                                                         onClick={() => setSelectedUnit(unit)}
+                                                                        title={`Depto: ${unit.number}\nPropietario: ${unit.responsible || 'Sin asignar'}`}
                                                                         className={`relative ${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20 unit-hover-effect'} rounded-lg lg:rounded-xl flex flex-col items-center justify-center border-2 border-transparent shadow-md ${sc.bg} text-white transition-all duration-300 cursor-pointer active:scale-95 shrink-0`}
                                                                     >
                                                                         <span className={`font-black tracking-tighter leading-none mb-1.5 ${isExporting ? 'text-[16px]' : 'text-[10px] lg:text-[14px]'}`}>
