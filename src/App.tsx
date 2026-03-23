@@ -299,6 +299,7 @@ const generateProjectData = (projectId: string) => {
 export default function App() {
     const [view, setView] = useState<'HOME' | 'SELECT' | 'SELECT_CONSTRUCTION' | 'DASHBOARD'>('HOME');
     const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+    const isConstruction = selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego';
     const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<UnitStatus | 'ALL'>('ALL');
@@ -313,6 +314,13 @@ export default function App() {
     const [projectsStats, setProjectsStats] = useState<Record<string, Record<string, number>>>({});
     const [isDarkMode, setIsDarkMode] = useState(false);
     const dashboardRef = useRef<HTMLDivElement>(null);
+
+    const getStatusConfig = (status: string) => {
+        const s = status.trim().toUpperCase();
+        return (isConstruction ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[s] || 
+               (isConstruction ? CONSTRUCTION_STATUS_CONFIG[status] : STATUS_CONFIG[status]) || 
+               { label: status, short: status, bg: 'bg-gray-400', color: 'text-white' };
+    };
 
     // Apply dark mode class to body/html
     useEffect(() => {
@@ -710,7 +718,7 @@ export default function App() {
         };
     }, [floorsData, selectedProject]);
 
-    const stats = (selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? [
+    const stats = isConstruction ? [
         { label: 'R0 - SIN INICIAR', value: statCounts.r0.count.toString(), percentage: `${statCounts.r0.percentage}%`, icon: Construction, color: 'text-gray-500', bg: 'bg-white dark:bg-zinc-900 border-2 border-gray-100 dark:border-zinc-800', textLight: false },
         { label: 'R1 - PRIMERA REVISIÓN', value: statCounts.r1.count.toString(), percentage: `${statCounts.r1.percentage}%`, icon: Construction, color: 'text-red-700', bg: 'bg-red-500 hover:bg-red-600', border: 'border-transparent', textLight: true },
         { label: 'R2 - SEGUNDA REVISIÓN', value: statCounts.r2.count.toString(), percentage: `${statCounts.r2.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
@@ -1140,8 +1148,8 @@ export default function App() {
                                             <div className="hidden lg:group-hover:block absolute top-[calc(100%-10px)] right-0 pt-[10px] z-50 min-w-[240px]">
                                                 <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-2xl p-2.5">
                                                     <button onClick={() => setFilterStatus('ALL')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl font-bold text-gray-600">Ver Todo</button>
-                                                    {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
-                                                        const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
+                                                    {((isConstruction) ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
+                                                        const config = (isConstruction ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
                                                         return (
                                                             <button key={code} onClick={() => setFilterStatus(code as UnitStatus)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-3">
                                                                 <div className={`w-3 h-3 rounded-full ${config.bg}`}></div>
@@ -1181,7 +1189,7 @@ export default function App() {
                                                     <div className="flex flex-col items-end">
                                                         <span className={`text-xs lg:text-[14px] font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} ${isExporting ? 'px-3 py-1 inline-block leading-none' : 'px-2 lg:px-2.5 py-0.5'}`}>{stat.percentage}</span>
                                                         <span className={`text-[7px] lg:text-[8px] font-bold ${stat.textLight ? 'text-white/90' : 'text-gray-400'} mt-1 uppercase tracking-tighter text-right`}>
-                                                            {(selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? 'del total' : (stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas')}
+                                                            {isConstruction ? 'del total' : (stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas')}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1206,8 +1214,8 @@ export default function App() {
                                         </div>
                                         <div className="flex col-span-full py-4 border-y border-gray-100 dark:border-zinc-800 overflow-x-auto scrollbar-hide">
                                             <div className="flex gap-4 lg:gap-6 lg:items-center min-w-max">
-                                                {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
-                                                    const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[label] || ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG[label] : STATUS_CONFIG[label]);
+                                                {(isConstruction ? ['R0', 'R1', 'R2', 'R3', 'REC'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
+                                                    const config = getStatusConfig(label);
                                                     return (
                                                         <div key={label} className="flex items-center gap-1.5 lg:gap-2 whitespace-nowrap">
                                                             <div className={`w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full ${config?.bg || 'bg-gray-200'}`}></div>
@@ -1351,7 +1359,7 @@ export default function App() {
                                                                     return <div key={unit.id} className={`${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20'} rounded-lg lg:rounded-xl border border-dotted border-gray-200 opacity-20 shrink-0`}></div>;
                                                                 }
 
-                                                                const sc = STATUS_CONFIG[unit.status.trim().toUpperCase()] || STATUS_CONFIG[unit.status] || { label: unit.status, short: unit.status, bg: 'bg-gray-400' };
+                                                                const sc = getStatusConfig(unit.status);
                                                                 const bNumber = String(unit.storageNumber || '-').replace(/B-/g, '').trim();
                                                                 const eNumber = String(unit.parkingNumber || '-').replace(/E-/g, '').trim();
 
@@ -1400,7 +1408,7 @@ export default function App() {
                                                                 <tr key={unit.id} onClick={() => setSelectedUnit(unit)} className="bg-white dark:bg-zinc-900 shadow-sm border border-gray-100 rounded-xl cursor-pointer">
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5 rounded-l-xl lg:rounded-l-2xl">
                                                                         {(() => {
-                                                                                    const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[unit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[unit.status] : STATUS_CONFIG[unit.status]) || { label: unit.status, bg: 'bg-gray-400' };
+                                                                                    const sc = getStatusConfig(unit.status);
                                                                                     return (
                                                                                         <div className="flex items-center gap-3">
                                                                                             <div className={`w-2 h-2 lg:w-3 lg:h-3 rounded-full ${sc.bg}`}></div>
@@ -1420,7 +1428,7 @@ export default function App() {
                                                                     </td>
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5">
                                                                         {(() => {
-                                                                                const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[unit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[unit.status] : STATUS_CONFIG[unit.status]) || { label: unit.status, bg: 'bg-gray-400' };
+                                                                                const sc = getStatusConfig(unit.status);
                                                                                 return (
                                                                                     <span className={`px-3 lg:px-4 py-1 rounded-full text-[8px] lg:text-[10px] font-black uppercase ${sc.color === 'text-white' || sc.color === 'text-gray-900' ? 'text-current' : 'text-white'} ${sc.bg}`}>
                                                                                         {sc.label}
@@ -1459,7 +1467,7 @@ export default function App() {
                                     <div className="flex items-center gap-4">
                                         <h2 className="text-xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tighterest">Unidad {selectedUnit.number}</h2>
                                         {(() => {
-                                            const sc = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[selectedUnit.status.trim().toUpperCase()] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[selectedUnit.status] : STATUS_CONFIG[selectedUnit.status]) || { label: selectedUnit.status, bg: 'bg-gray-400' };
+                                            const sc = getStatusConfig(selectedUnit.status);
                                             return (
                                                 <span className={`px-3 lg:px-4 py-1 lg:py-1.5 rounded-full text-[9px] lg:text-[11px] font-black uppercase shadow-lg ${sc.bg} ${sc.color === 'text-white' ? 'text-white' : 'text-gray-900'}`}>
                                                     {sc.label}
