@@ -110,7 +110,7 @@ const PROJECTS: Project[] = [
     {
         id: 'don-diego',
         name: 'DON DIEGO',
-        location: 'Antofagasta, Chile',
+        location: 'Temuco, Chile',
         units: 150,
         progress: 10,
         image: '/projects/don-diego.png',
@@ -639,12 +639,14 @@ export default function App() {
 
     const statCounts = useMemo(() => {
         const counts = { E: 0, LE: 0, OBS: 0, SV: 0, DL: 0, R0: 0, R1: 0, R2: 0, R3: 0, RECEPCIONADO: 0 };
+        const isConstruction = selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego';
+        
         floorsData.forEach(f => {
             f.units.forEach(u => {
                 const s = u.status.trim().toUpperCase();
                 let canonical = u.status;
                 
-                if (selectedProject?.stage === 'CONSTRUCCION') {
+                if (isConstruction) {
                     if (s === 'R0' || s === 'SIN INICIAR' || s === 'S/R' || s === '') canonical = 'R0';
                     else if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') canonical = 'R1';
                     else if (s === 'R2' || s === 'REVISION 2' || s === 'SEGUNDA REVISIÓN') canonical = 'R2';
@@ -688,7 +690,7 @@ export default function App() {
         };
     }, [floorsData, selectedProject]);
 
-    const stats = selectedProject?.stage === 'CONSTRUCCION' ? [
+    const stats = (selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? [
         { label: 'R0 - SIN INICIAR', value: statCounts.r0.count.toString(), percentage: `${statCounts.r0.percentage}%`, icon: Construction, color: 'text-gray-500', bg: 'bg-white dark:bg-zinc-900 border-2 border-gray-100 dark:border-zinc-800', textLight: false },
         { label: 'R1 - PRIMERA REVISIÓN', value: statCounts.r1.count.toString(), percentage: `${statCounts.r1.percentage}%`, icon: Construction, color: 'text-red-700', bg: 'bg-red-500 hover:bg-red-600', border: 'border-transparent', textLight: true },
         { label: 'R2 - SEGUNDA REVISIÓN', value: statCounts.r2.count.toString(), percentage: `${statCounts.r2.percentage}%`, icon: Construction, color: 'text-orange-700', bg: 'bg-orange-500 hover:bg-orange-600', border: 'border-transparent', textLight: true },
@@ -1118,8 +1120,8 @@ export default function App() {
                                             <div className="hidden lg:group-hover:block absolute top-[calc(100%-10px)] right-0 pt-[10px] z-50 min-w-[240px]">
                                                 <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 rounded-2xl shadow-2xl p-2.5">
                                                     <button onClick={() => setFilterStatus('ALL')} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl font-bold text-gray-600">Ver Todo</button>
-                                                    {(selectedProject?.stage === 'CONSTRUCCION' ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
-                                                        const config = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
+                                                    {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['E', 'LE', 'OBS', 'SV', 'DL']).map((code) => {
+                                                        const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[code];
                                                         return (
                                                             <button key={code} onClick={() => setFilterStatus(code as UnitStatus)} className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-xl flex items-center gap-3">
                                                                 <div className={`w-3 h-3 rounded-full ${config.bg}`}></div>
@@ -1159,7 +1161,7 @@ export default function App() {
                                                     <div className="flex flex-col items-end">
                                                         <span className={`text-xs lg:text-[14px] font-black ${stat.textLight ? 'text-white' : 'text-gray-900 dark:text-white'} ${isExporting ? 'px-3 py-1 inline-block leading-none' : 'px-2 lg:px-2.5 py-0.5'}`}>{stat.percentage}</span>
                                                         <span className={`text-[7px] lg:text-[8px] font-bold ${stat.textLight ? 'text-white/90' : 'text-gray-400'} mt-1 uppercase tracking-tighter text-right`}>
-                                                            {stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas'}
+                                                            {(selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? 'del total' : (stat.label === 'DEPARTAMENTOS VENDIDOS' || stat.label === 'TOTAL UNIDADES' ? 'del total' : 'de las unidades vendidas')}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1184,8 +1186,8 @@ export default function App() {
                                         </div>
                                         <div className="flex col-span-full py-4 border-y border-gray-100 dark:border-zinc-800 overflow-x-auto scrollbar-hide">
                                             <div className="flex gap-4 lg:gap-6 lg:items-center min-w-max">
-                                                {(selectedProject?.stage === 'CONSTRUCCION' ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
-                                                    const config = (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[label] || (selectedProject?.stage === 'CONSTRUCCION' ? CONSTRUCTION_STATUS_CONFIG[label] : STATUS_CONFIG[label]);
+                                                {((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? ['R0', 'R1', 'R2', 'R3', 'RECEPCIONADO'] : ['ENTREGADO', 'LISTO PARA ENTREGA', 'CON OBSERVACIONES', 'SIN VISITA', 'DEPARTAMENTO LIBRE']).map((label) => {
+                                                    const config = ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG : STATUS_CONFIG)[label] || ((selectedProject?.stage === 'CONSTRUCCION' || selectedProject?.id === 'don-diego') ? CONSTRUCTION_STATUS_CONFIG[label] : STATUS_CONFIG[label]);
                                                     return (
                                                         <div key={label} className="flex items-center gap-1.5 lg:gap-2 whitespace-nowrap">
                                                             <div className={`w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full ${config?.bg || 'bg-gray-200'}`}></div>
