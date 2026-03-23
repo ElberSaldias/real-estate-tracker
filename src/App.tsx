@@ -430,39 +430,68 @@ export default function App() {
         }
 
         setIsLoading(true);
-        setFloorsData([]); // Clear stale data immediately on project switch
+        setFloorsData([]); 
 
         try {
-            // Force browser to fetch fresh data by adding a timestamp
             const cacheBuster = `?t=${Date.now()}`;
             const response = await fetch(project.gasUrl + cacheBuster);
-            if (!response.ok) throw new Error('Error al conectar con la base de datos');
-            // Direct check for flat JSON list from specialized construction script
+            if (!response.ok) throw new Error('Error de conexión con la base de datos');
             const data = await response.json();
 
             let normalizedData = [];
 
-            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined' || typeof data[0].number !== 'undefined' || typeof data[0].unidad !== 'undefined' || typeof data[0].Unidad !== 'undefined')) {
-                // Flat list of units
-                normalizedData = [{
-                    floor: 'LISTADO',
-                    units: data.map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
-                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
-                        return {
-                            id: String(deptoVal),
-                            number: String(deptoVal),
-                            floor: u.ubicacion || '0',
-                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                            type: 'DEPARTAMENTO' as const,
-                            ...u
-                        };
-                    })
-                }];
+            if (Array.isArray(data) && data.length > 0) {
+                // If it's a flat list of units NOT wrapped in a floor object yet
+                if (typeof data[0].units === 'undefined' || (typeof data[0].number !== 'undefined' || typeof data[0].depto !== 'undefined' || typeof data[0].unidad !== 'undefined')) {
+                    // Group by floor automatically
+                    const groups: Record<string, any[]> = {};
+                    data.forEach((u: any) => {
+                        const floorName = String(u.floor || u.FLOOR || u.ubicacion || u.piso || u.PISO || '0').trim();
+                        if (!groups[floorName]) groups[floorName] = [];
+                        groups[floorName].push(u);
+                    });
+
+                    normalizedData = Object.entries(groups).map(([floorName, units]) => ({
+                        floor: floorName.replace(/[^\d]/g, '') || floorName,
+                        units: units.map((u: any) => {
+                            const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
+                            const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            return {
+                                id: String(deptoVal),
+                                number: String(deptoVal),
+                                floor: u.ubicacion || floorName || '0',
+                                status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
+                                responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
+                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                                storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
+                                type: 'DEPARTAMENTO' as const,
+                                ...u
+                            };
+                        })
+                    })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                } else {
+                    // It's a list of floor objects [ { floor: '...', units: [...] }, ... ]
+                    normalizedData = data.map((f: any) => ({
+                        floor: f.floor || '0',
+                        units: (f.units || []).map((u: any) => {
+                            const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
+                            const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
+                            return {
+                                id: String(deptoVal),
+                                number: String(deptoVal),
+                                floor: u.ubicacion || f.floor || '0',
+                                status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
+                                responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
+                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                                storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                                observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
+                                type: 'DEPARTAMENTO' as const,
+                                ...u
+                            };
+                        })
+                    })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
+                }
             } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
                 // Object structure { "PISO X": [...], ... }
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
@@ -474,54 +503,31 @@ export default function App() {
                             id: String(deptoVal),
                             number: String(deptoVal),
                             floor: u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
-                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento || u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega || u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
                             type: 'DEPARTAMENTO' as const,
                             ...u
                         };
                     })
-                })).sort((a, b) => {
-                    const valA = parseInt(String(a.floor)) || 0;
-                    const valB = parseInt(String(b.floor)) || 0;
-                    return valB - valA;
-                });
-            } else if (Array.isArray(data)) {
-                // Array of floors [ { floor: '...', units: [...] }, ... ]
-                normalizedData = data.map((f: any) => ({
-                    floor: f.floor || '0',
-                    units: (f.units || []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
-                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
-                        return {
-                            id: String(deptoVal),
-                            number: String(deptoVal),
-                            floor: u.ubicacion || f.floor || '0',
-                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
-                            type: 'DEPARTAMENTO' as const,
-                            ...u
-                        };
-                    })
-                })).sort((a, b) => String(b.floor).localeCompare(String(a.floor)));
+                })).sort((a, b) => parseInt(String(b.floor)) - parseInt(String(a.floor)));
             } else {
-                throw new Error('Estructura de datos no reconocida');
+                throw new Error('La API respondió éxitosamente pero no se encontraron departamentos registrados.');
             }
 
-            console.log(`Exito: ${normalizedData.length} pisos cargados desde Google Sheets`);
+            console.log(`Don Diego DB Sync: ${normalizedData.length} pisos procesados`);
             setFloorsData(normalizedData);
         } catch (error) {
             console.error('Error synchronizing:', error);
-            alert(`Error de sincronización: ${error instanceof Error ? error.message : 'Error desconocido'}.\n\nPosible causa: No has desplegado el script como "Cualquiera" o falta autorizar permisos en Google Apps Script.`);
-            // Solo regenerar si no hay datos previos
-            if (floorsData.length === 0) {
-                setFloorsData(generateProjectData(projectId));
-            }
+            // Help the user with a specific message if data is []
+            const msg = error instanceof Error && error.message.includes('encontraron') 
+                ? error.message 
+                : `Error de sincronización con Apps Script.\n\nPor favor verifica que la hoja de cálculo de Don Diego no esté vacía y que las columnas se llamen 'number', 'floor' y 'status'.`;
+            
+            alert(msg);
+            if (floorsData.length === 0) setFloorsData(generateProjectData(projectId));
         } finally {
             setIsLoading(false);
         }
@@ -669,49 +675,44 @@ export default function App() {
         
         floorsData.forEach(f => {
             f.units.forEach(u => {
-                const s = u.status.trim().toUpperCase();
-                let canonical = u.status;
+                const s = String(u.status || '').trim().toUpperCase();
                 
                 if (isConstruction) {
-                    if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') canonical = 'R1';
-                    else if (s === 'R2' || s === 'REVISION 2' || s === 'SEGUNDA REVISIÓN') canonical = 'R2';
-                    else if (s === 'R3' || s === 'REVISION 3' || s === 'TERCERA REVISIÓN') canonical = 'R3';
-                    else if (s === 'REC' || s === 'RECEPCIONADO' || s === 'RECEPCIONADOS') canonical = 'REC';
-                    else canonical = 'R0';
+                    if (s === 'R1' || s === 'REVISION 1' || s === 'PRIMERA REVISIÓN') counts.R1++;
+                    else if (s === 'R2' || s === 'REVISION 2' || s === 'SEGUNDA REVISIÓN') counts.R2++;
+                    else if (s === 'R3' || s === 'REVISION 3' || s === 'TERCERA REVISIÓN') counts.R3++;
+                    else if (s === 'REC' || s === 'RECEPCIONADO' || s === 'RECEPCIONADOS') counts.REC++;
+                    else counts.R0++;
                 } else {
-                    if (s === 'MI' || s === 'ENTREGADO' || s === 'E') canonical = 'E';
-                    else if (s === 'OBSERVACIÓN' || s === 'OBSERVACION' || s === 'CON OBSERVACIONES' || s === 'OBS') canonical = 'OBS';
-                    else if (s === 'LISTO PARA ENTREGA' || s === 'LE') canonical = 'LE';
-                    else if (s === 'SIN VISITA' || s === 'SV') canonical = 'SV';
-                    else if (s === 'DEPARTAMENTO LIBRE' || s === 'DL') canonical = 'DL';
-                }
-
-                if (canonical in counts) {
-                    counts[canonical as keyof typeof counts]++;
+                    if (s === 'MI' || s === 'ENTREGADO' || s === 'E') counts.E++;
+                    else if (s === 'OBSERVACIÓN' || s === 'OBSERVACION' || s === 'CON OBSERVACIONES' || s === 'OBS' || (u.observaciones && u.observaciones.length > 0)) counts.OBS++;
+                    else if (s === 'LISTO PARA ENTREGA' || s === 'LE') counts.LE++;
+                    else if (s === 'SIN VISITA' || s === 'SV') counts.SV++;
+                    else if (s === 'DEPARTAMENTO LIBRE' || s === 'DL') counts.DL++;
+                    else counts.SV++; // Default fallback for delivery
                 }
             });
         });
 
-        const total = selectedProject?.units || 1;
-        const soldTotal = total - counts.DL;
-        const visited = counts.E + counts.LE + counts.OBS;
+        const totalCapacity = selectedProject?.units || 150;
+        const soldTotal = Math.max(totalCapacity - counts.DL, 1);
+        const calcP = (c: number, t: number) => Number(((c / t) * 100).toFixed(1));
 
         return {
-            visited: { count: visited, percentage: Number(((visited / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            entregados: { count: counts.E, percentage: Number(((counts.E / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            listos: { count: counts.LE, percentage: Number(((counts.LE / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            observaciones: { count: counts.OBS, percentage: Number(((counts.OBS / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            sinVisita: { count: counts.SV, percentage: Number(((counts.SV / Math.max(soldTotal, 1)) * 100).toFixed(1)) },
-            
-            r0: { count: counts.R0, percentage: Number(((counts.R0 / total) * 100).toFixed(1)) },
-            r1: { count: counts.R1, percentage: Number(((counts.R1 / total) * 100).toFixed(1)) },
-            r2: { count: counts.R2, percentage: Number(((counts.R2 / total) * 100).toFixed(1)) },
-            r3: { count: counts.R3, percentage: Number(((counts.R3 / total) * 100).toFixed(1)) },
-            recepcionado: { count: counts.REC, percentage: Number(((counts.REC / total) * 100).toFixed(1)) },
-            
-            vendidos: { count: soldTotal, percentage: Number(((soldTotal / total) * 100).toFixed(1)) },
-            sinVender: { count: counts.DL, percentage: Number(((counts.DL / total) * 100).toFixed(1)) },
-            total: { count: total, percentage: 100 }
+            // Delivery Stats
+            visited: { count: counts.E + counts.LE + counts.OBS, percentage: calcP(counts.E + counts.LE + counts.OBS, soldTotal) },
+            entregados: { count: counts.E, percentage: calcP(counts.E, soldTotal) },
+            listos: { count: counts.LE, percentage: calcP(counts.LE, soldTotal) },
+            observaciones: { count: counts.OBS, percentage: calcP(counts.OBS, soldTotal) },
+            sinVisita: { count: counts.SV, percentage: calcP(counts.SV, soldTotal) },
+            vendidos: { count: soldTotal, percentage: calcP(soldTotal, totalCapacity) },
+            // Construction Stats
+            r0: { count: counts.R0, percentage: calcP(counts.R0, totalCapacity) },
+            r1: { count: counts.R1, percentage: calcP(counts.R1, totalCapacity) },
+            r2: { count: counts.R2, percentage: calcP(counts.R2, totalCapacity) },
+            r3: { count: counts.R3, percentage: calcP(counts.R3, totalCapacity) },
+            recepcionado: { count: counts.REC, percentage: calcP(counts.REC, totalCapacity) },
+            total: { count: totalCapacity, percentage: 100 }
         };
     }, [floorsData, selectedProject]);
 
