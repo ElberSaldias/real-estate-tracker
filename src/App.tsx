@@ -442,20 +442,21 @@ export default function App() {
 
             let normalizedData = [];
 
-            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined' || typeof data[0].number !== 'undefined')) {
+            if (Array.isArray(data) && data.length > 0 && (typeof data[0].depto !== 'undefined' || typeof data[0]['depto.'] !== 'undefined' || typeof data[0].number !== 'undefined' || typeof data[0].unidad !== 'undefined' || typeof data[0].Unidad !== 'undefined')) {
                 // Flat list of units
                 normalizedData = [{
                     floor: 'LISTADO',
                     units: data.map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.id;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
+                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
                             floor: u.ubicacion || '0',
-                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento_1 || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega_1 || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
+                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
+                            parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
+                            storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
                             type: 'DEPARTAMENTO' as const,
                             ...u
@@ -467,13 +468,14 @@ export default function App() {
                 normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
                     floor: floorName.replace(/[^\d]/g, '') || floorName,
                     units: (Array.isArray(units) ? units : []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
+                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
                             floor: u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
-                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
                             parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
                             storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
@@ -491,13 +493,14 @@ export default function App() {
                 normalizedData = data.map((f: any) => ({
                     floor: f.floor || '0',
                     units: (f.units || []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad;
+                        const deptoVal = u.number || u.depto || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
+                        const statusVal = u.status || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
                         return {
                             id: String(deptoVal),
                             number: String(deptoVal),
                             floor: u.ubicacion || f.floor || '0',
-                            status: String(u.status || u.revisión || u.revision || 'R0').trim().toUpperCase() as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || 'SIN ASIGNAR',
+                            status: String(statusVal).trim().toUpperCase() as UnitStatus,
+                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
                             parkingNumber: u.estacionamiento_1 || u.estacionamiento || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
                             storageNumber: u.bodega_1 || u.bodega || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
                             observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || u.observations || '',
@@ -507,7 +510,7 @@ export default function App() {
                     })
                 })).sort((a, b) => String(b.floor).localeCompare(String(a.floor)));
             } else {
-                throw new Error('Estructura de datos no reconocida (se esperaba Objeto Agrupado o Arreglo de Pisos)');
+                throw new Error('Estructura de datos no reconocida');
             }
 
             console.log(`Exito: ${normalizedData.length} pisos cargados desde Google Sheets`);
@@ -1397,7 +1400,7 @@ export default function App() {
                                                             <th className="px-8 py-2">Estac.</th>
                                                             <th className="px-8 py-2">Estado</th>
                                                             <th className="px-8 py-2">Propietario</th>
-                                                            <th className="px-8 py-2 text-right">Ver</th>
+                                                            <th className="px-8 py-2 text-right">Versión</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1439,7 +1442,9 @@ export default function App() {
                                                                         <span className="text-sm font-bold text-gray-600 truncate max-w-[150px] block">{unit.responsible || '-'}</span>
                                                                     </td>
                                                                     <td className="px-4 lg:px-8 py-3 lg:py-5 text-right rounded-r-xl lg:rounded-r-2xl">
-                                                                        <ArrowRight size={16} className="ml-auto text-gray-400" />
+                                                                        <span className="text-xs font-black text-gray-400 ml-auto">
+                                                                            {getStatusConfig(unit.status).short}
+                                                                        </span>
                                                                     </td>
                                                                 </tr>
                                                             ))}
