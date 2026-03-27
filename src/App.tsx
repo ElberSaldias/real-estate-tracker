@@ -46,7 +46,7 @@ type UnitStatus = 'E' | 'LE' | 'OBS' | 'DL' | 'SV' | 'R1' | 'R2' | 'R3' | 'S/R' 
 interface Unit {
     id: string;
     number: string;
-    floor: number;
+    floor: string | number; // String floors like 'B' or 'S'
     status: UnitStatus;
     type: 'DEPARTAMENTO' | 'BODEGA' | 'ESTACIONAMIENTO';
     lastVisit?: string;
@@ -314,6 +314,7 @@ export default function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [projectsStats, setProjectsStats] = useState<Record<string, Record<string, number>>>({});
     const [isDarkMode, setIsDarkMode] = useState(false);
+    const [viewType, setViewType] = useState<'DEPARTAMENTO' | 'BODEGA' | 'ESTACIONAMIENTO'>('DEPARTAMENTO');
     const dashboardRef = useRef<HTMLDivElement>(null);
 
     const getStatusConfig = (status: string) => {
@@ -433,6 +434,65 @@ export default function App() {
         setIsLoading(true);
         setFloorsData([]); 
 
+        // Helper to find column values in a case-insensitive way with aliases
+        const getVal = (obj: any, aliases: string[]) => {
+            const keys = Object.keys(obj);
+            const aliasSet = new Set(aliases.map(a => a.toLowerCase().trim()));
+            const key = keys.find(k => aliasSet.has(k.toLowerCase().trim()));
+            return key ? obj[key] : undefined;
+        };
+
+        const mapUnit = (u: any, floorName: string): Unit => {
+            const deptoVal = getVal(u, ['number', 'depto', 'depto.', 'departamento', 'unidad', 'nro_unidad', 'id', 'nro depto', 'u', 'apartamento', 'num_unidad', 'nro de unidad']) || u.number || u.id || '-';
+            const floorVal = getVal(u, ['floor', 'piso', 'floor_name', 'pisonro']) || '-';
+            const statusVal = getVal(u, ['status', 'estado', 'revisión', 'revision', 'REVISIÓN', 'REVISION', 'versión', 'version', 'VERSIÓN', 'VERSION', 'proceso_status', 'etapa']) || 'R0';
+            const obsDate = getVal(u, ['fecha_obs', 'fecha_observacion', 'fecha de observaciones', 'fecha_observaciones', 'fecha observaciones', 'date_obs', 'fecha_insp']);
+            
+            const parking = getVal(u, [
+                'estacionamiento', 'estacionamiento_1', 'estacionamiento 1', 'estac', 'estac.', 'e', 'parking', 
+                'n_estacionamiento', 'estacionamientos', 'nro_estacionamiento', 'est', 'estac1', 'est1', 'e1',
+                'id_estacionamiento', 'id estac', 'nro estac', 'nro. estac', 'n. estac', 'n_estac'
+            ]) || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-';
+                           
+            const storage = getVal(u, [
+                'bodega', 'bodega_1', 'bodega 1', 'bod', 'bod.', 'b', 'storage', 
+                'n_bodega', 'bodegas', 'nro_bodega', 'bod1', 'b1',
+                'id_bodega', 'id bod', 'nro bod', 'nro. bod', 'n. bod', 'n_bod'
+            ]) || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-';
+
+            const owner = getVal(u, ['propietario', 'PROPIETARIO', 'responsible', 'responsable', 'cliente', 'poseedor', 'nombre']) || 'SIN ASIGNAR';
+            const acta = getVal(u, ['link_acta', 'acta_link', 'Link de dropbox', 'acta', 'Link_acta', 'dropbox_link', 'url_acta']);
+            const comments = getVal(u, ['comentarios', 'COMENTARIOS', 'observaciones', 'OBSERVACIONES', 'notas', 'obs']);
+
+            // Detect type automatically
+            let type: 'DEPARTAMENTO' | 'BODEGA' | 'ESTACIONAMIENTO' = 'DEPARTAMENTO';
+            const rawType = getVal(u, ['type', 'tipo', 'tipo_unidad', 'clase']);
+            if (rawType) {
+                const rt = String(rawType).toUpperCase();
+                if (rt.includes('BODEGA') || rt === 'B') type = 'BODEGA';
+                else if (rt.includes('ESTACIONAMIENTO') || rt === 'E' || rt.includes('PARKING')) type = 'ESTACIONAMIENTO';
+            } else if (String(deptoVal).toUpperCase().startsWith('B')) {
+                type = 'BODEGA';
+            } else if (String(deptoVal).toUpperCase().startsWith('E')) {
+                type = 'ESTACIONAMIENTO';
+            }
+
+            return {
+                id: String(deptoVal),
+                number: String(deptoVal),
+                floor: getVal(u, ['piso', 'floor', 'FLOOR', 'ubicacion', 'ubicación', 'PISO']) || floorName || '0',
+                status: (String(statusVal).trim().toUpperCase()) as UnitStatus,
+                responsible: String(owner),
+                parkingNumber: String(parking),
+                storageNumber: String(storage),
+                fecha_obs: obsDate,
+                link_acta: acta,
+                observaciones: comments,
+                type,
+                ...u
+            };
+        };
+
         try {
             const cacheBuster = `?t=${Date.now()}`;
             const response = await fetch(project.gasUrl + cacheBuster);
@@ -442,124 +502,60 @@ export default function App() {
             let normalizedData = [];
 
             if (Array.isArray(data) && data.length > 0) {
-                // If it's a flat list of units NOT wrapped in a floor object yet
-                if (typeof data[0].units === 'undefined' || (typeof data[0].number !== 'undefined' || typeof data[0].depto !== 'undefined' || typeof data[0].unidad !== 'undefined')) {
-                    // Group by floor automatically
+                // Flat list of units
+                if (typeof data[0].units === 'undefined' || getVal(data[0], ['number', 'depto', 'unidad', 'id'])) {
                     const groups: Record<string, any[]> = {};
                     data.forEach((u: any) => {
-                        const deptoVal = u.number || u.depto || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
-                        let floorName = String(u.floor || u.FLOOR || u.ubicacion || u.piso || u.PISO || '').trim().replace('PISO ', '');
+                        const deptoVal = getVal(u, ['number', 'depto', 'departamento', 'depto.', 'DEPTO', 'unidad', 'Unidad', 'UNIDAD', 'id']);
+                        let fName = String(getVal(u, ['floor', 'FLOOR', 'ubicacion', 'piso', 'PISO']) || '').trim().replace('PISO ', '');
                         
-                        // Intelligent floor extraction from depto number if field is missing
-                        if (!floorName && deptoVal) {
+                        // Extract floor from depto number (e.g., 1201 -> 12)
+                        if (!fName && deptoVal) {
                             const dStr = String(deptoVal).replace(/[^\d]/g, '');
-                            if (dStr.length === 3) floorName = dStr.charAt(0);
-                            else if (dStr.length >= 4) floorName = dStr.slice(0, dStr.length - 2);
+                            if (dStr.length === 3) fName = dStr.charAt(0);
+                            else if (dStr.length >= 4) fName = dStr.slice(0, dStr.length - 2);
                         }
                         
-                        const finalFloor = floorName || '0';
+                        const finalFloor = fName || '0';
                         if (!groups[finalFloor]) groups[finalFloor] = [];
                         groups[finalFloor].push(u);
                     });
 
-                    normalizedData = Object.entries(groups).map(([floorName, units]) => ({
-                        floor: floorName.replace(/[^\d]/g, '') || floorName,
-                        units: units.map((u: any) => {
-                            const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.DEPTO || u.unidad || u.Unidad || u.UNIDAD || u.id;
-                            const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
-                            const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
-                            
-                            return {
-                                id: String(deptoVal),
-                                number: String(deptoVal),
-                                floor: u.piso || u.ubicacion || floorName || '0',
-                                status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
-                                responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                                storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                                fecha_obs: obsDate,
-                                link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
-                                observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                                type: 'DEPARTAMENTO' as const,
-                                ...u
-                            };
-                        })
-                    })).sort((a, b) => {
-                        const valA = parseInt(String(a.floor)) || 0;
-                        const valB = parseInt(String(b.floor)) || 0;
-                        return valB - valA;
-                    });
+                    normalizedData = Object.entries(groups).map(([fName, units]) => ({
+                        floor: fName.replace(/[^\d]/g, '') || fName,
+                        units: units.map(u => mapUnit(u, fName))
+                    }));
                 } else {
-                    // It's a list of floor objects [ { floor: '...', units: [...] }, ... ]
+                    // List of floor objects { floor: '...', units: [...] }
                     normalizedData = data.map((f: any) => ({
                         floor: f.floor || '0',
-                        units: (f.units || []).map((u: any) => {
-                            const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
-                            const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
-                            const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
-                            
-                            return {
-                                id: String(deptoVal),
-                                number: String(deptoVal),
-                                floor: u.piso || u.ubicacion || f.floor || '0',
-                                status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
-                                responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                                parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                                storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                                fecha_obs: obsDate,
-                                link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
-                                observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                                type: 'DEPARTAMENTO' as const,
-                                ...u
-                            };
-                        })
-                    })).sort((a, b) => {
-                        const valA = parseInt(String(a.floor)) || 0;
-                        const valB = parseInt(String(b.floor)) || 0;
-                        return valB - valA;
-                    });
+                        units: (f.units || []).map((u: any) => mapUnit(u, f.floor))
+                    }));
                 }
             } else if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
                 // Object structure { "PISO X": [...], ... }
-                normalizedData = Object.entries(data).map(([floorName, units]: [string, any]) => ({
-                    floor: floorName.replace(/[^\d]/g, '') || floorName,
-                    units: (Array.isArray(units) ? units : []).map((u: any) => {
-                        const deptoVal = u.number || u.depto || u.departamento || u['depto.'] || u.id || u.unidad || u.Unidad || u.UNIDAD;
-                        const statusVal = u.status || u.estado || u.revisión || u.revision || u.REVISIÓN || u.REVISION || u.versión || u.version || u.VERSIÓN || u.VERSION || 'R0';
-                        const obsDate = u.fecha_obs || u.fecha_observacion || u['fecha de observaciones'] || u.fecha_observaciones || u['fecha observaciones'] || u.date_obs;
-                        
-                        return {
-                            id: String(deptoVal),
-                            number: String(deptoVal),
-                            floor: u.piso || u.ubicacion || floorName.replace(/[^\d]/g, '') || '0',
-                            status: (String(statusVal).trim().toUpperCase() || 'R0') as UnitStatus,
-                            responsible: u.propietario || u.PROPIETARIO || u.responsible || u.responsable || 'SIN ASIGNAR',
-                            parkingNumber: u.estacionamiento || u.estacionamiento_1 || u['estacionamiento 1'] || [u.estacionamiento_1, u.estacionamiento_2].filter(Boolean).join(', ') || '-',
-                            storageNumber: u.bodega || u.bodega_1 || u['bodega 1'] || [u.bodega_1, u.bodega_2].filter(Boolean).join(', ') || '-',
-                            fecha_obs: obsDate,
-                            link_acta: u.link_acta || u.acta_link || u['Link de dropbox'] || u.acta || u.Link_acta,
-                            observaciones: u.comentarios || u.COMENTARIOS || u.observaciones || '',
-                            type: 'DEPARTAMENTO' as const,
-                            ...u
-                        };
-                    })
-                })).sort((a, b) => {
-                    const valA = parseInt(String(a.floor)) || 0;
-                    const valB = parseInt(String(b.floor)) || 0;
-                    return valB - valA;
-                });
+                normalizedData = Object.entries(data).map(([fName, units]: [string, any]) => ({
+                    floor: fName.replace(/[^\d]/g, '') || fName,
+                    units: (Array.isArray(units) ? units : []).map(u => mapUnit(u, fName))
+                }));
             } else {
                 throw new Error('La API respondió éxitosamente pero no se encontraron departamentos registrados.');
             }
 
-            console.log(`Don Diego DB Sync: ${normalizedData.length} pisos procesados`);
+            // Sort floors descending
+            normalizedData.sort((a, b) => {
+                const valA = parseInt(String(a.floor)) || 0;
+                const valB = parseInt(String(b.floor)) || 0;
+                return valB - valA;
+            });
+
+            console.log(`Project Sync Loaded: ${normalizedData.length} floors processed`);
             setFloorsData(normalizedData);
         } catch (error) {
             console.error('Error synchronizing:', error);
-            // Help the user with a specific message if data is []
             const msg = error instanceof Error && error.message.includes('encontraron') 
                 ? error.message 
-                : `Error de sincronización con Apps Script.\n\nPor favor verifica que la hoja de cálculo de Don Diego no esté vacía y que las columnas se llamen 'number', 'floor' y 'status'.`;
+                : `Error de sincronización con la base de datos de ${project.name}.\n\nPor favor verifica el estado del servicio.`;
             
             alert(msg);
             if (floorsData.length === 0) setFloorsData(generateProjectData(projectId));
@@ -1264,7 +1260,26 @@ export default function App() {
                                                 })}
                                             </div>
                                         </div>
-                                        <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl lg:rounded-2xl border border-transparent shadow-inner w-fit self-center lg:self-auto">
+                                        <div className="flex flex-wrap bg-gray-100 dark:bg-zinc-800 p-1 rounded-xl lg:rounded-2xl border border-transparent shadow-inner w-fit self-center lg:self-auto gap-1">
+                                            <button
+                                                onClick={() => setViewType('DEPARTAMENTO')}
+                                                className={`px-3 lg:px-4 py-1.5 text-[9px] lg:text-[10px] font-bold rounded-lg transition-all ${viewType === 'DEPARTAMENTO' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                DEPTOS.
+                                            </button>
+                                            <button
+                                                onClick={() => setViewType('BODEGA')}
+                                                className={`px-3 lg:px-4 py-1.5 text-[9px] lg:text-[10px] font-bold rounded-lg transition-all ${viewType === 'BODEGA' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                BODEGAS
+                                            </button>
+                                            <button
+                                                onClick={() => setViewType('ESTACIONAMIENTO')}
+                                                className={`px-3 lg:px-4 py-1.5 text-[9px] lg:text-[10px] font-bold rounded-lg transition-all ${viewType === 'ESTACIONAMIENTO' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                ESTAC.
+                                            </button>
+                                            <div className="w-[1px] h-4 bg-gray-300 dark:bg-zinc-600 mx-1 align-middle self-center"></div>
                                             <button
                                                 onClick={() => setActiveTab('GRID')}
                                                 className={`px-4 lg:px-6 py-1.5 lg:py-2 text-[10px] lg:text-xs font-black rounded-lg lg:rounded-xl transition-all ${activeTab === 'GRID' ? 'bg-white text-black dark:bg-zinc-700 dark:text-white shadow-lg' : 'text-gray-400'}`}
@@ -1321,7 +1336,7 @@ export default function App() {
                                                                     <div className="flex justify-between items-start mb-4">
                                                                         <div className="flex flex-col">
                                                                             <span className="text-xl lg:text-2xl font-black text-gray-900 dark:text-white tracking-tighterest">
-                                                                                Departamento {String(u.number).replace(/^(U\.|EE\. UU\.|DEPTO\.|UNIDAD)\s*/i, '')}
+                                                                                {(u.type === 'DEPARTAMENTO' ? 'Departamento ' : '') + String(u.number).replace(/^(U\.|EE\. UU\.|DEPTO\.|UNIDAD)\s*/i, '')}
                                                                             </span>
                                                                             <div className="flex gap-3 mt-1.5">
                                                                                 <div className="px-2 py-0.5 bg-gray-100 dark:bg-zinc-800 rounded-md">
@@ -1364,7 +1379,10 @@ export default function App() {
                                                 <div className={`flex ${selectedProject?.id === 'don-claudio' ? 'gap-1 lg:gap-1.5' : 'gap-2 lg:gap-4'}`}>
                                                     <div className={`${selectedProject?.id === 'don-claudio' ? 'w-10 lg:w-12' : 'w-14 lg:w-20'} shrink-0`}></div>
                                                     <div className={`flex ${selectedProject?.id === 'san-ignacio' ? 'gap-6' : 'gap-1.5'} flex-1 flex-nowrap min-w-max`}>
-                                                        {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(String(u.number).slice(-2)))) || [17]) }, (_, i) => {
+                                                        {Array.from({ length: (Math.max(...floorsData.flatMap(f => f.units.map(u => {
+                                                            const n = parseInt(String(u.number).replace(/[^\d]/g, '').slice(-2));
+                                                            return isNaN(n) ? 0 : n;
+                                                        }))) || 17) }, (_, i) => {
                                                             const lineNum = i + 1;
                                                             return (
                                                                 <div key={i} className={`${isExporting ? 'min-w-[90px]' : 'w-12 lg:w-16'} text-center`}>
@@ -1375,20 +1393,27 @@ export default function App() {
                                                     </div>
                                                 </div>
                                                 {floorsData.sort((a, b) => {
-                                                    // Handle string floors like 'LISTADO'
                                                     const floorA = typeof a.floor === 'string' ? -1 : a.floor;
                                                     const floorB = typeof b.floor === 'string' ? -1 : b.floor;
                                                     return (floorB as number) - (floorA as number);
                                                 }).map((floor) => (
                                                     <div key={floor.floor} className={`flex ${selectedProject?.id === 'don-claudio' ? 'gap-1 lg:gap-1.5' : 'gap-2 lg:gap-4'} group floor-row`}>
                                                         <div className={`${selectedProject?.id === 'don-claudio' ? 'w-10 lg:w-12 text-center' : 'w-14 lg:w-20'} shrink-0 ${selectedProject?.id === 'san-ignacio' ? 'pt-1' : 'pt-2'}`}>
-                                                            <span className="text-[10px] lg:text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">PISO {floor.floor}</span>
+                                                            <span className="text-[10px] lg:text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">{/^\d/.test(String(floor.floor)) ? `PISO ${floor.floor}` : floor.floor}</span>
                                                         </div>
                                                         <div className={`flex ${selectedProject?.id === 'san-ignacio' ? 'gap-6' : 'gap-1.5'} flex-1 flex-nowrap min-w-max`}>
-                                                            {Array.from({ length: Math.max(...floorsData.flatMap(f => f.units.map(u => parseInt(String(u.number).slice(-2)))) || [17]) }, (_, i) => {
+                                                            {Array.from({ length: (Math.max(...floorsData.flatMap(f => f.units.map(u => {
+                                                                const n = parseInt(String(u.number).replace(/[^\d]/g, '').slice(-2));
+                                                                return isNaN(n) ? 0 : n;
+                                                            }))) || 17) }, (_, i) => {
                                                                 const lineNum = i + 1;
-                                                                const unit = floor.units.find(u => parseInt(String(u.number).slice(-2)) === lineNum);
+                                                                const unit = floor.units.find(u => {
+                                                                    const n = parseInt(String(u.number).replace(/[^\d]/g, '').slice(-2));
+                                                                    return n === lineNum && u.type === viewType;
+                                                                });
+
                                                                 if (!unit) return <div key={`empty-${lineNum}`} className={`${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20'} shrink-0`} />;
+                                                                
                                                                 const isFiltered = filterStatus !== 'ALL' && unit.status !== filterStatus;
                                                                 const matchesSearch = searchTerm === '' || unit.number.toLowerCase().includes(searchTerm.toLowerCase()) || (unit.responsible && unit.responsible.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -1408,20 +1433,25 @@ export default function App() {
                                                                             setActiveTab('TABLE');
                                                                             window.scrollTo({ top: document.querySelector('table')?.offsetTop || 1000, behavior: 'smooth' });
                                                                         }}
-                                                                        title={`Depto: ${unit.number}\nPropietario: ${unit.responsible || 'Sin asignar'}`}
+                                                                        title={`${unit.type}: ${unit.number}\nPropietario: ${unit.responsible || 'Sin asignar'}`}
                                                                         className={`relative ${isExporting ? 'w-[90px] h-[90px]' : 'w-12 h-16 lg:w-16 lg:h-20 unit-hover-effect'} rounded-lg lg:rounded-xl flex flex-col items-center justify-center border-2 border-transparent shadow-md ${sc.bg} text-white transition-all duration-300 cursor-pointer active:scale-95 shrink-0`}
                                                                     >
                                                                         <span className={`font-black tracking-tighter leading-none mb-1.5 ${isExporting ? 'text-[16px]' : 'text-[10px] lg:text-[14px]'}`}>
                                                                             {unit.number}
                                                                         </span>
-                                                                        <div className={`flex flex-col items-center gap-0.5 opacity-100 ${isExporting ? 'scale-100' : 'scale-[0.9] lg:scale-100'}`}>
-                                                                            <span className={`font-black leading-tight uppercase w-full text-center break-words ${isExporting ? 'text-[11px] max-w-[85px]' : 'text-[8px] lg:text-[10px] whitespace-nowrap overflow-hidden'}`}>
-                                                                                B: {bNumber}
-                                                                            </span>
-                                                                            <span className={`font-black leading-tight uppercase w-full text-center break-words ${isExporting ? 'text-[11px] max-w-[85px]' : 'text-[8px] lg:text-[10px] whitespace-nowrap overflow-hidden'}`}>
-                                                                                E: {eNumber}
-                                                                            </span>
-                                                                        </div>
+                                                                        {unit.type === 'DEPARTAMENTO' && (
+                                                                            <div className={`flex flex-col items-center gap-0.5 opacity-100 ${isExporting ? 'scale-100' : 'scale-[0.9] lg:scale-100'}`}>
+                                                                                <span className={`font-black leading-tight uppercase w-full text-center break-words ${isExporting ? 'text-[11px] max-w-[85px]' : 'text-[8px] lg:text-[10px] whitespace-nowrap overflow-hidden'}`}>
+                                                                                    B: {bNumber}
+                                                                                </span>
+                                                                                <span className={`font-black leading-tight uppercase w-full text-center break-words ${isExporting ? 'text-[11px] max-w-[85px]' : 'text-[8px] lg:text-[10px] whitespace-nowrap overflow-hidden'}`}>
+                                                                                    E: {eNumber}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                        {unit.type !== 'DEPARTAMENTO' && (
+                                                                            <span className="text-[7px] lg:text-[9px] font-bold uppercase opacity-80">{unit.type}</span>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })}
